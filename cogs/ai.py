@@ -172,6 +172,18 @@ class AICog(commands.Cog):
 
     # --- Commands ---
 
+    @commands.command(name="ai")
+    async def ai_chat(self, ctx, *, prompt: str):
+        """Chat with the AI"""
+        # Check if AI is enabled in this channel
+        config = get_channel_config(ctx.channel.id)
+        if not config.get("enabled"):
+            return
+
+        async with ctx.typing():
+            response = await self.generate_response(ctx.channel.id, prompt, ctx.author.display_name)
+            await ctx.reply(response)
+
     @app_commands.command(name="aion", description="Enable AI in this channel")
     @app_commands.checks.has_permissions(administrator=True)
     async def aion(self, interaction: discord.Interaction):
@@ -220,17 +232,15 @@ class AICog(commands.Cog):
         if not config.get("enabled"):
             return
 
-        # Check for trigger: !ai prefix OR reply to bot
+        # Check for trigger: Reply to bot
+        # Note: !ai is now handled by the command above
         is_reply = False
         if message.reference and message.reference.resolved:
             if message.reference.resolved.author.id == self.bot.user.id:
                 is_reply = True
 
-        if message.content.startswith('!ai ') or is_reply:
+        if is_reply:
             prompt = message.content
-            if message.content.startswith('!ai '):
-                prompt = message.content[4:]
-            
             async with message.channel.typing():
                 response = await self.generate_response(message.channel.id, prompt, message.author.display_name)
                 await message.reply(response)
