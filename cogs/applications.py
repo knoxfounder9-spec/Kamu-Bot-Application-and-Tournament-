@@ -286,7 +286,7 @@ class ApplicationSelect(ui.Select):
             discord.SelectOption(label="Trainers App", description="Apply to become a Trainer", emoji="🎓"),
             discord.SelectOption(label="Support Team App", description="Apply for the Support Team", emoji="🛡️"),
         ]
-        super().__init__(placeholder="Select an application...", min_values=1, max_values=1, options=options)
+        super().__init__(placeholder="Select an application...", min_values=1, max_values=1, options=options, custom_id="application_select")
 
     async def callback(self, interaction: discord.Interaction):
         choice = self.values[0]
