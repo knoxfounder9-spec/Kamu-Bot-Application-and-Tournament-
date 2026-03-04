@@ -2,9 +2,107 @@ import discord
 from discord import app_commands, ui
 from discord.ext import commands
 import os
+import json
 
 # --- Constants ---
 LOG_CHANNEL_ID = os.getenv('LOG_CHANNEL_ID')
+ROLES_FILE = 'roles.json'
+
+# --- Helper Functions for Roles ---
+def load_roles():
+    if not os.path.exists(ROLES_FILE):
+        return {}
+    with open(ROLES_FILE, 'r') as f:
+        return json.load(f)
+
+def save_roles(roles_data):
+    with open(ROLES_FILE, 'w') as f:
+        json.dump(roles_data, f, indent=4)
+
+def get_role_id(guild_id, app_type):
+    roles_data = load_roles()
+    return roles_data.get(str(guild_id), {}).get(app_type)
+
+# --- Admin Views ---
+
+class ApplicationReviewView(ui.View):
+    def __init__(self, applicant_id: int, app_type: str):
+        super().__init__(timeout=None) # Persistent view for logs
+        self.applicant_id = applicant_id
+        self.app_type = app_type
+
+    @ui.button(label="Accept", style=discord.ButtonStyle.success, custom_id="app_accept")
+    async def accept_button(self, interaction: discord.Interaction, button: ui.Button):
+        await interaction.response.defer()
+        
+        guild = interaction.guild
+        member = guild.get_member(self.applicant_id)
+        
+        if not member:
+            await interaction.followup.send("Member not found in the server.", ephemeral=True)
+            return
+
+        role_id = get_role_id(guild.id, self.app_type)
+        role_added = False
+        
+        if role_id:
+            role = guild.get_role(role_id)
+            if role:
+                try:
+                    await member.add_roles(role)
+                    role_added = True
+                except discord.Forbidden:
+                    await interaction.followup.send("I don't have permission to add that role.", ephemeral=True)
+            else:
+                await interaction.followup.send("Configured role not found.", ephemeral=True)
+        
+        # Update Embed
+        embed = interaction.message.embeds[0]
+        embed.color = discord.Color.green()
+        embed.add_field(name="Status", value=f"Accepted by {interaction.user.mention}", inline=False)
+        if role_added:
+             embed.add_field(name="Role Action", value=f"Role {role.mention} added.", inline=False)
+        
+        # Disable buttons
+        for item in self.children:
+            item.disabled = True
+        
+        await interaction.message.edit(embed=embed, view=self)
+        
+        # Notify User
+        try:
+            await member.send(f"Congratulations! Your application for **{self.app_type}** in **{guild.name}** has been ACCEPTED!")
+        except:
+            pass
+            
+        await interaction.followup.send("Application accepted.", ephemeral=True)
+
+    @ui.button(label="Reject", style=discord.ButtonStyle.danger, custom_id="app_reject")
+    async def reject_button(self, interaction: discord.Interaction, button: ui.Button):
+        await interaction.response.defer()
+        
+        guild = interaction.guild
+        member = guild.get_member(self.applicant_id)
+        
+        # Update Embed
+        embed = interaction.message.embeds[0]
+        embed.color = discord.Color.red()
+        embed.add_field(name="Status", value=f"Rejected by {interaction.user.mention}", inline=False)
+        
+        # Disable buttons
+        for item in self.children:
+            item.disabled = True
+            
+        await interaction.message.edit(embed=embed, view=self)
+        
+        # Notify User
+        if member:
+            try:
+                await member.send(f"Your application for **{self.app_type}** in **{guild.name}** has been REJECTED.")
+            except:
+                pass
+        
+        await interaction.followup.send("Application rejected.", ephemeral=True)
 
 # --- Modals ---
 
@@ -253,6 +351,7 @@ async def send_application_log(interaction: discord.Interaction, app_type: str, 
         timestamp=interaction.created_at
     )
     embed.set_author(name=f"{interaction.user.name} ({interaction.user.id})", icon_url=interaction.user.display_avatar.url)
+    embed.set_footer(text=f"User ID: {interaction.user.id}")
     
     for name, value in fields:
         embed.add_field(name=name, value=value, inline=False)
@@ -270,7 +369,8 @@ async def send_application_log(interaction: discord.Interaction, app_type: str, 
         log_channel = discord.utils.get(interaction.guild.text_channels, name='application-logs')
 
     if log_channel:
-        await log_channel.send(embed=embed)
+        view = ApplicationReviewView(applicant_id=interaction.user.id, app_type=app_type)
+        await log_channel.send(embed=embed, view=view)
         await interaction.response.send_message("Application submitted successfully!", ephemeral=True)
     else:
         await interaction.response.send_message("Application submitted! (Note: 'application-logs' channel not found, so admins might not see this immediately.)", ephemeral=True)
@@ -326,6 +426,30 @@ class Applications(commands.Cog):
         embed.set_thumbnail(url=interaction.guild.icon.url if interaction.guild.icon else None)
         
         await interaction.response.send_message(embed=embed, view=ApplicationView())
+
+    @app_commands.command(name="setrole", description="Set the role to be given when an application is accepted")
+    @app_commands.checks.has_permissions(administrator=True)
+    @app_commands.describe(
+        app_type="The type of application",
+        role="The role to give"
+    )
+    @app_commands.choices(app_type=[
+        app_commands.Choice(name="Grind Team", value="Grind Team"),
+        app_commands.Choice(name="Recruiter Team", value="Recruiter Team"),
+        app_commands.Choice(name="Trainers", value="Trainers"),
+        app_commands.Choice(name="Support Team", value="Support Team")
+    ])
+    async def setrole(self, interaction: discord.Interaction, app_type: app_commands.Choice[str], role: discord.Role):
+        roles_data = load_roles()
+        guild_id = str(interaction.guild_id)
+        
+        if guild_id not in roles_data:
+            roles_data[guild_id] = {}
+        
+        roles_data[guild_id][app_type.value] = role.id
+        save_roles(roles_data)
+        
+        await interaction.response.send_message(f"Role for **{app_type.value}** set to {role.mention}", ephemeral=True)
 
 async def setup(bot):
     await bot.add_cog(Applications(bot))
