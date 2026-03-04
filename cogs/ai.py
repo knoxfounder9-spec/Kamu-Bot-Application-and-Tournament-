@@ -150,72 +150,67 @@ class AICog(commands.Cog):
                 logger.error(f"Gemini Error: {e}")
                 return f"Gemini Error: {e}"
 
-        # --- Free AI Backend (Pollinations with G4F Fallback) ---
+        # --- Free AI Backend (Multi-Provider Fallback) ---
         else:
-            # Try Pollinations first
-            try:
-                messages = [{"role": "system", "content": sys_instruct}]
-                for h in history_data:
-                    role = "user" if h["role"] == "user" else "assistant"
-                    content = " ".join(h["parts"])
-                    messages.append({"role": role, "content": content})
-                
-                messages.append({"role": "user", "content": final_prompt})
+            # Prepare messages with history for memory
+            messages = [{"role": "system", "content": sys_instruct}]
+            for h in history_data:
+                role = "user" if h["role"] == "user" else "assistant"
+                content = " ".join(h["parts"])
+                messages.append({"role": role, "content": content})
+            messages.append({"role": "user", "content": final_prompt})
 
-                async with aiohttp.ClientSession() as session:
-                    async with session.post(
-                        "https://text.pollinations.ai/",
-                        json={
-                            "messages": messages,
-                            "model": "openai",
-                            "seed": 42
-                        },
-                        timeout=10 # Faster timeout
-                    ) as resp:
-                        if resp.status == 200:
-                            text = await resp.text()
-                            if text:
-                                # Sanitize mentions
-                                text = text.replace("@everyone", "everyone").replace("@here", "here")
-                                if len(text) > 2000:
-                                    text = text[:1997] + "..."
-                                add_history(channel_id, "user", prompt)
-                                add_history(channel_id, "model", text)
-                                return text
-                        else:
-                            logger.warning(f"Pollinations API returned status {resp.status}, falling back to G4F.")
-            except Exception as e:
-                logger.warning(f"Pollinations AI failed: {e}, falling back to G4F.")
+            # 1. Try Pollinations with different models
+            pollinations_models = ["openai", "mistral", "llama"]
+            for model_name in pollinations_models:
+                try:
+                    async with aiohttp.ClientSession() as session:
+                        async with session.post(
+                            "https://text.pollinations.ai/",
+                            json={
+                                "messages": messages,
+                                "model": model_name,
+                                "seed": 42
+                            },
+                            timeout=8
+                        ) as resp:
+                            if resp.status == 200:
+                                text = await resp.text()
+                                if text and len(text.strip()) > 0:
+                                    text = text.replace("@everyone", "everyone").replace("@here", "here")
+                                    if len(text) > 2000: text = text[:1997] + "..."
+                                    add_history(channel_id, "user", prompt)
+                                    add_history(channel_id, "model", text)
+                                    return text
+                except Exception:
+                    continue
 
-            # Fallback to G4F
-            try:
-                messages = [{"role": "system", "content": sys_instruct}]
-                for h in history_data:
-                    role = "user" if h["role"] == "user" else "assistant"
-                    content = " ".join(h["parts"])
-                    messages.append({"role": role, "content": content})
-                messages.append({"role": "user", "content": final_prompt})
+            # 2. Try G4F with a variety of models (Heavy & Lightweight)
+            g4f_models = [
+                "gpt-4o", "gpt-4", "claude-3-opus", "claude-3-sonnet", 
+                "gemini-pro", "llama-3-70b", "mixtral-8x7b", "gpt-3.5-turbo"
+            ]
+            
+            for g_model in g4f_models:
+                try:
+                    response = await asyncio.to_thread(
+                        g4f.ChatCompletion.create,
+                        model=g_model, 
+                        messages=messages
+                    )
+                    text = str(response)
+                    if text and len(text.strip()) > 5: # Minimal length check
+                        text = text.replace("@everyone", "everyone").replace("@here", "here")
+                        if len(text) > 2000: text = text[:1997] + "..."
+                        add_history(channel_id, "user", prompt)
+                        add_history(channel_id, "model", text)
+                        return text
+                except Exception:
+                    continue
 
-                response = await asyncio.to_thread(
-                    g4f.ChatCompletion.create,
-                    model="gpt-4o-mini", 
-                    messages=messages
-                )
-                text = str(response)
-                
-                if text and len(text.strip()) > 0:
-                    # Sanitize mentions
-                    text = text.replace("@everyone", "everyone").replace("@here", "here")
-                    if len(text) > 2000:
-                        text = text[:1997] + "..."
-                    add_history(channel_id, "user", prompt)
-                    add_history(channel_id, "model", text)
-                    return text
-                else:
-                    raise Exception("G4F returned empty response")
-            except Exception as e:
-                logger.error(f"G4F Fallback failed: {e}")
-                return "I'm having trouble connecting to my brain (All AI providers failed)."
+            # If all failed, return None instead of an error message
+            logger.error(f"All AI providers failed for channel {channel_id}")
+            return None
 
     # --- Commands ---
 
@@ -229,9 +224,11 @@ class AICog(commands.Cog):
 
         async with ctx.typing():
             response = await self.generate_response(ctx.channel.id, prompt, ctx.author.display_name)
-            # Use allowed_mentions to strictly prevent @everyone and @here pings
-            allowed = discord.AllowedMentions(everyone=False, roles=False, users=True)
-            await ctx.reply(response, allowed_mentions=allowed)
+            if response:
+                # Use allowed_mentions to strictly prevent @everyone and @here pings
+                allowed = discord.AllowedMentions(everyone=False, roles=False, users=True)
+                await ctx.reply(response, allowed_mentions=allowed)
+            # If response is None, we just don't reply (silent failure as requested)
 
     @app_commands.command(name="aion", description="Enable AI in this channel")
     @app_commands.checks.has_permissions(administrator=True)
@@ -300,9 +297,10 @@ class AICog(commands.Cog):
             prompt = message.content
             async with message.channel.typing():
                 response = await self.generate_response(message.channel.id, prompt, message.author.display_name)
-                # Use allowed_mentions to strictly prevent @everyone and @here pings
-                allowed = discord.AllowedMentions(everyone=False, roles=False, users=True)
-                await message.reply(response, allowed_mentions=allowed)
+                if response:
+                    # Use allowed_mentions to strictly prevent @everyone and @here pings
+                    allowed = discord.AllowedMentions(everyone=False, roles=False, users=True)
+                    await message.reply(response, allowed_mentions=allowed)
 
 async def setup(bot):
     await bot.add_cog(AICog(bot))
