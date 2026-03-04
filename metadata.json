@@ -1,0 +1,5 @@
+{
+  "name": "Kamu Applications Bot",
+  "description": "Discord bot for managing Kamu guild applications.",
+  "requestFramePermissions": []
+}
