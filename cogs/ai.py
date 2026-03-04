@@ -174,35 +174,43 @@ class AICog(commands.Cog):
                     async with session.post(
                         "https://text.pollinations.ai/",
                         json={"messages": messages, "model": model, "seed": 42},
-                        timeout=3
+                        timeout=15
                     ) as resp:
                         if resp.status == 200:
                             text = await resp.text()
                             if text and len(text.strip()) > 2:
                                 return text
-            except:
+            except Exception as e:
+                logger.warning(f"Pollinations {model} failed: {e}")
                 return None
 
         async def try_g4f(model):
             try:
-                # Use a very short timeout for g4f to keep things "instant"
+                from g4f.client import AsyncClient
+                client = AsyncClient()
                 response = await asyncio.wait_for(
-                    asyncio.to_thread(g4f.ChatCompletion.create, model=model, messages=messages),
-                    timeout=3
+                    client.chat.completions.create(model=model, messages=messages),
+                    timeout=15
                 )
-                text = str(response)
+                text = response.choices[0].message.content
                 if text and len(text.strip()) > 5:
                     return text
-            except:
+            except Exception as e:
+                logger.warning(f"g4f {model} failed: {e}")
                 return None
 
         # Tier 1: Ultra Fast Models (Parallel)
         tier1_tasks = [
-            try_pollinations("openai"),
-            try_pollinations("mistral"),
+            try_pollinations("openai"), # GPT-4o
+            try_pollinations("claude"), # Claude 3.5 Sonnet
+            try_pollinations("llama"), # Llama 3.1
+            try_pollinations("qwen"), # Qwen 2.5
+            try_pollinations("mistral"), # Mistral
+            try_pollinations("searchgpt"), # SearchGPT
             try_g4f("gpt-4o-mini"),
             try_g4f("gemini-1.5-flash"),
-            try_g4f("llama-3.2-3b")
+            try_g4f("llama-3.1-70b"),
+            try_g4f("mixtral-8x7b")
         ]
         
         for completed_task in asyncio.as_completed(tier1_tasks):
@@ -217,11 +225,11 @@ class AICog(commands.Cog):
 
         # Tier 2: Secondary Fast Models (Parallel)
         tier2_tasks = [
-            try_pollinations("qwen"),
-            try_pollinations("llama"),
-            try_g4f("phi-3-mini"),
-            try_g4f("gpt-3.5-turbo-0125"),
-            try_g4f("mistral-tiny")
+            try_pollinations("mistral-large"),
+            try_pollinations("gpt-4"),
+            try_g4f("gpt-3.5-turbo"),
+            try_g4f("claude-3-haiku"),
+            try_g4f("gemma-2b")
         ]
         
         for completed_task in asyncio.as_completed(tier2_tasks):
@@ -236,12 +244,13 @@ class AICog(commands.Cog):
 
         # Tier 3: Broad Fallback (Sequential but fast)
         # This is the "100+ models" safety net
-        all_models = ["qwen-72b", "claude", "gpt-4", "p1", "turbo", "unity", "rtist", "evil", "hyphen"]
+        all_models = ["qwen-72b", "p1", "turbo", "unity", "rtist", "evil", "hyphen", "midjourney"]
         for m in all_models:
             res = await try_pollinations(m)
             if res:
                 text = res.replace("@everyone", "everyone").replace("@here", "here")
                 text = re.sub(r'<@&?\d+>', '', text)
+                if len(text) > 2000: text = text[:1997] + "..."
                 add_history(channel_id, "user", prompt)
                 add_history(channel_id, "model", text)
                 return text

@@ -63,78 +63,73 @@ class AutoModerationCog(commands.Cog):
                         async with session.post(
                             "https://text.pollinations.ai/",
                             json={"messages": messages, "model": model, "seed": 42},
-                            timeout=3
+                            timeout=10
                         ) as resp:
                             if resp.status == 200:
                                 text = await resp.text()
                                 if text and len(text.strip()) > 2:
                                     return text.strip()
-                except:
+                except Exception as e:
+                    logger.warning(f"AutoMod Pollinations {model} failed: {e}")
                     return None
 
             async def try_g4f(model):
                 try:
+                    from g4f.client import AsyncClient
+                    client = AsyncClient()
                     response = await asyncio.wait_for(
-                        asyncio.to_thread(g4f.ChatCompletion.create, model=model, messages=messages),
-                        timeout=3
+                        client.chat.completions.create(model=model, messages=messages),
+                        timeout=10
                     )
-                    text = str(response).strip()
-                    if text and len(text) > 3:
-                        return text
-                except:
+                    text = response.choices[0].message.content
+                    if text and len(text.strip()) > 3:
+                        return text.strip()
+                except Exception as e:
+                    logger.warning(f"AutoMod g4f {model} failed: {e}")
                     return None
 
             # Parallel Tier 1: Fastest Models
             tier1_tasks = [
                 try_pollinations("openai"),
                 try_pollinations("mistral"),
+                try_pollinations("llama"),
                 try_g4f("gpt-4o-mini"),
                 try_g4f("gemini-1.5-flash")
             ]
             
             for completed_task in asyncio.as_completed(tier1_tasks):
                 result = await completed_task
-                if result and "UNSAFE" in result:
-                    parts = result.split(":")
-                    reason = parts[1].strip() if len(parts) > 1 else "Violation"
-                    severity = parts[2].strip().lower() if len(parts) > 2 else "medium"
-                    return True, reason, severity
-                elif result == "SAFE":
-                    return False, None, None
+                if result:
+                    if "UNSAFE" in result:
+                        parts = result.split(":")
+                        reason = parts[1].strip() if len(parts) > 1 else "Violation"
+                        severity = parts[2].strip().lower() if len(parts) > 2 else "medium"
+                        return True, reason, severity
+                    elif "SAFE" in result:
+                        return False, None, None
 
             # Parallel Tier 2: Secondary Fast Models
             tier2_tasks = [
                 try_pollinations("qwen"),
-                try_g4f("llama-3.2-3b"),
-                try_g4f("phi-3-mini")
+                try_pollinations("claude"),
+                try_g4f("llama-3.1-70b"),
+                try_g4f("mixtral-8x7b")
             ]
             for completed_task in asyncio.as_completed(tier2_tasks):
                 result = await completed_task
-                if result and "UNSAFE" in result:
-                    parts = result.split(":")
-                    reason = parts[1].strip() if len(parts) > 1 else "Violation"
-                    severity = parts[2].strip().lower() if len(parts) > 2 else "medium"
-                    return True, reason, severity
-                elif result == "SAFE":
-                    return False, None, None
+                if result:
+                    if "UNSAFE" in result:
+                        parts = result.split(":")
+                        reason = parts[1].strip() if len(parts) > 1 else "Violation"
+                        severity = parts[2].strip().lower() if len(parts) > 2 else "medium"
+                        return True, reason, severity
+                    elif "SAFE" in result:
+                        return False, None, None
 
             return False, None, None
 
         except Exception as e:
             logger.error(f"AutoMod Error: {e}")
-            return False, None, None
-            
-            if result and "UNSAFE" in result:
-                # Parse result: UNSAFE: Reason: Severity
-                parts = result.split(":")
-                reason = parts[1].strip() if len(parts) > 1 else "Violation"
-                severity = parts[2].strip().lower() if len(parts) > 2 else "medium"
-                return True, reason, severity
-                
-            return False, None, None
-
-        except Exception as e:
-            logger.error(f"AutoMod Pollinations Error: {e}")
             return False, None, None
 
     @commands.Cog.listener()
