@@ -40,33 +40,24 @@ class KamuBot(commands.Bot):
             logger.warning("No cogs directory found.")
         
         # Sync commands
+        # User requested GLOBAL commands only.
+        
+        # 1. If a guild ID is known, clear guild-specific commands to avoid duplicates.
         if GUILD_ID:
-            guild = discord.Object(id=int(GUILD_ID))
-            
-            # 1. Copy global commands to the guild
-            self.tree.copy_global_to(guild=guild)
-            
-            # 2. Clear global commands from the tree (so we can sync an empty list globally)
-            self.tree.clear_commands(guild=None)
-            
             try:
-                # 3. Sync to the guild
-                synced = await self.tree.sync(guild=guild)
-                logger.info(f'Synced {len(synced)} command(s) to guild {GUILD_ID}')
-                
-                # 4. Sync globally (now empty) to remove old global commands
-                await self.tree.sync(guild=None)
-                logger.info('Cleared global commands to prevent duplicates.')
-                
+                guild = discord.Object(id=int(GUILD_ID))
+                self.tree.clear_commands(guild=guild)
+                await self.tree.sync(guild=guild)
+                logger.info(f"Cleared guild-specific commands for {GUILD_ID} to ensure only global commands exist.")
             except Exception as e:
-                logger.error(f'Failed to sync commands: {e}')
-        else:
-            # Global sync (can take up to 1 hour)
-            try:
-                synced = await self.tree.sync()
-                logger.info(f'Synced {len(synced)} command(s) globally')
-            except Exception as e:
-                logger.error(f'Failed to sync commands globally: {e}')
+                logger.warning(f"Failed to clear guild commands: {e}")
+
+        # 2. Sync globally
+        try:
+            synced = await self.tree.sync()
+            logger.info(f'Synced {len(synced)} command(s) globally')
+        except Exception as e:
+            logger.error(f'Failed to sync commands globally: {e}')
 
     async def on_ready(self):
         logger.info(f'Logged in as {self.user} (ID: {self.user.id})')
