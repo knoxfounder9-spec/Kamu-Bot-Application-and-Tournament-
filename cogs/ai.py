@@ -118,14 +118,16 @@ class AICog(commands.Cog):
         # --- G4F (Fallback / No Key) ---
         else:
             # List of providers to try in order
-            # Note: g4f.Provider attributes might change. Using string names or safer access.
-            providers = [
-                g4f.Provider.Blackbox,
-                g4f.Provider.DuckDuckGo,
-                g4f.Provider.PollinationsAI,
-                g4f.Provider.DarkAI,
-                None # Auto mode as last resort
-            ]
+            # Safely build the list of providers based on what's available in the installed g4f version
+            potential_providers = ['Blackbox', 'DuckDuckGo', 'PollinationsAI', 'DarkAI', 'Bing', 'OpenaiChat']
+            providers = []
+            
+            for p_name in potential_providers:
+                if hasattr(g4f.Provider, p_name):
+                    providers.append(getattr(g4f.Provider, p_name))
+            
+            # Add None for Auto mode as the final fallback
+            providers.append(None)
 
             last_error = None
 
