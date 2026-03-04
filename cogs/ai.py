@@ -1,7 +1,8 @@
 import discord
 from discord import app_commands
 from discord.ext import commands
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 import os
 import json
 import logging
@@ -66,53 +67,70 @@ def add_history(channel_id, role, message):
 class AICog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
+        self.client = None
         if GEMINI_API_KEY:
-            genai.configure(api_key=GEMINI_API_KEY)
+            try:
+                self.client = genai.Client(api_key=GEMINI_API_KEY)
+            except Exception as e:
+                logger.error(f"Failed to initialize Gemini Client: {e}")
         else:
             logger.warning("GEMINI_API_KEY not found. AI features will be disabled.")
 
     async def generate_response(self, channel_id, prompt, user_name):
-        if not GEMINI_API_KEY:
-            return "AI is not configured (missing API key)."
+        if not self.client:
+            return "AI is not configured (missing GEMINI_API_KEY in .env)."
 
         config = get_channel_config(channel_id)
         persona = config.get("persona", "helpful assistant")
         history_data = config.get("history", [])
         
-        # Create model with system instruction
-        # We create a new instance to apply the specific persona for this channel
-        model = genai.GenerativeModel(
-            'gemini-1.5-flash',
-            system_instruction=f"You are a {persona}. You are talking to {user_name}."
-        )
-
-        formatted_history = []
-        for h in history_data:
-            formatted_history.append({
-                "role": h["role"],
-                "parts": h["parts"]
-            })
-
-        # Gemini requires history to start with 'user' role
-        if formatted_history and formatted_history[0]['role'] == 'model':
-            formatted_history.pop(0)
-
-        chat = model.start_chat(history=formatted_history)
+        # Convert history to format expected by the new SDK
+        # The new SDK typically uses 'user' and 'model' roles.
+        # We need to construct the chat contents.
         
+        contents = []
+        
+        # Add system instruction as the first part if supported, or just keep it in mind.
+        # The new SDK supports config for system instructions.
+        
+        for h in history_data:
+            role = h["role"]
+            # Map 'model' to 'model' and 'user' to 'user'
+            # Ensure parts are strings
+            parts = h["parts"]
+            contents.append(types.Content(role=role, parts=[types.Part.from_text(text=p) for p in parts]))
+
+        # Add the new user message
+        # We don't add it to contents here because we pass it to send_message or generate_content
+        # But for chat context, we usually provide history + new message.
+        
+        sys_instruct = f"You are a {persona}. You are talking to {user_name}."
+
         try:
-            # Run blocking call in thread
+            # Using the new SDK's generate_content or chats
+            # client.models.generate_content(model='gemini-2.0-flash', contents=...)
+            
+            # Let's use a chat session for easier history management
+            chat = self.client.chats.create(
+                model='gemini-2.0-flash',
+                config=types.GenerateContentConfig(
+                    system_instruction=sys_instruct,
+                    temperature=0.7
+                ),
+                history=contents
+            )
+            
             response = await asyncio.to_thread(chat.send_message, prompt)
             text = response.text
             
             # Update history
-            # We store just the prompt, not the full system injection, since system instruction is handled by the model config now.
             add_history(channel_id, "user", prompt)
             add_history(channel_id, "model", text)
             
             return text
         except Exception as e:
             logger.error(f"AI Generation Error: {e}")
-            return "I'm having trouble thinking right now."
+            return f"I'm having trouble thinking right now. ({e})"
 
     # --- Commands ---
 
