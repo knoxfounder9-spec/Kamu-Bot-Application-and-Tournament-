@@ -7,6 +7,7 @@ import os
 import json
 import logging
 import asyncio
+import g4f
 
 # Configure logging
 logger = logging.getLogger('discord')
@@ -71,66 +72,81 @@ class AICog(commands.Cog):
         if GEMINI_API_KEY:
             try:
                 self.client = genai.Client(api_key=GEMINI_API_KEY)
+                logger.info("Gemini AI Client initialized successfully.")
             except Exception as e:
                 logger.error(f"Failed to initialize Gemini Client: {e}")
         else:
-            logger.warning("GEMINI_API_KEY not found. AI features will be disabled.")
+            logger.warning("GEMINI_API_KEY not found. Using g4f (free/keyless) fallback. This may be slower or less reliable.")
 
     async def generate_response(self, channel_id, prompt, user_name):
-        if not self.client:
-            return "AI is not configured (missing GEMINI_API_KEY in .env)."
-
         config = get_channel_config(channel_id)
         persona = config.get("persona", "helpful assistant")
         history_data = config.get("history", [])
         
-        # Convert history to format expected by the new SDK
-        # The new SDK typically uses 'user' and 'model' roles.
-        # We need to construct the chat contents.
-        
-        contents = []
-        
-        # Add system instruction as the first part if supported, or just keep it in mind.
-        # The new SDK supports config for system instructions.
-        
-        for h in history_data:
-            role = h["role"]
-            # Map 'model' to 'model' and 'user' to 'user'
-            # Ensure parts are strings
-            parts = h["parts"]
-            contents.append(types.Content(role=role, parts=[types.Part.from_text(text=p) for p in parts]))
+        # --- GEMINI (Preferred) ---
+        if self.client:
+            try:
+                contents = []
+                for h in history_data:
+                    role = h["role"]
+                    parts = h["parts"]
+                    contents.append(types.Content(role=role, parts=[types.Part.from_text(text=p) for p in parts]))
 
-        # Add the new user message
-        # We don't add it to contents here because we pass it to send_message or generate_content
-        # But for chat context, we usually provide history + new message.
-        
-        sys_instruct = f"You are a {persona}. You are talking to {user_name}."
+                sys_instruct = f"You are a {persona}. You are talking to {user_name}."
 
-        try:
-            # Using the new SDK's generate_content or chats
-            # client.models.generate_content(model='gemini-2.0-flash', contents=...)
-            
-            # Let's use a chat session for easier history management
-            chat = self.client.chats.create(
-                model='gemini-2.0-flash',
-                config=types.GenerateContentConfig(
-                    system_instruction=sys_instruct,
-                    temperature=0.7
-                ),
-                history=contents
-            )
-            
-            response = await asyncio.to_thread(chat.send_message, prompt)
-            text = response.text
-            
-            # Update history
-            add_history(channel_id, "user", prompt)
-            add_history(channel_id, "model", text)
-            
-            return text
-        except Exception as e:
-            logger.error(f"AI Generation Error: {e}")
-            return f"I'm having trouble thinking right now. ({e})"
+                chat = self.client.chats.create(
+                    model='gemini-2.0-flash',
+                    config=types.GenerateContentConfig(
+                        system_instruction=sys_instruct,
+                        temperature=0.7
+                    ),
+                    history=contents
+                )
+                
+                response = await asyncio.to_thread(chat.send_message, prompt)
+                text = response.text
+                
+                add_history(channel_id, "user", prompt)
+                add_history(channel_id, "model", text)
+                return text
+            except Exception as e:
+                logger.error(f"Gemini Error: {e}")
+                # Fallthrough to g4f if Gemini fails? Or just return error?
+                # Let's return error to avoid confusion if key is present but invalid.
+                return f"Gemini Error: {e}"
+
+        # --- G4F (Fallback / No Key) ---
+        else:
+            try:
+                # Construct messages for g4f
+                messages = [{"role": "system", "content": f"You are a {persona}. You are talking to {user_name}."}]
+                for h in history_data:
+                    # g4f uses 'user' and 'assistant' usually
+                    role = "user" if h["role"] == "user" else "assistant"
+                    content = " ".join(h["parts"])
+                    messages.append({"role": role, "content": content})
+                
+                messages.append({"role": "user", "content": prompt})
+
+                # Use g4f
+                # We use a provider that doesn't need auth, like Blackbox or DuckDuckGo
+                response = await asyncio.to_thread(
+                    g4f.ChatCompletion.create,
+                    model="gpt-4o-mini", # Often maps to a free model
+                    messages=messages,
+                    provider=g4f.Provider.Blackbox # Explicitly try a provider or leave auto
+                )
+                
+                # g4f returns string directly usually
+                text = str(response)
+                
+                add_history(channel_id, "user", prompt)
+                add_history(channel_id, "model", text)
+                return text
+
+            except Exception as e:
+                logger.error(f"g4f Error: {e}")
+                return "I'm having trouble thinking right now. (No API Key & Fallback failed)"
 
     # --- Commands ---
 
