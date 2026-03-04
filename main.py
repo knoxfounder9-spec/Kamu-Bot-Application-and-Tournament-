@@ -40,15 +40,26 @@ class KamuBot(commands.Bot):
             logger.warning("No cogs directory found.")
         
         # Sync commands
-        # If GUILD_ID is set, we sync to that guild for instant updates
         if GUILD_ID:
             guild = discord.Object(id=int(GUILD_ID))
+            
+            # 1. Copy global commands to the guild
             self.tree.copy_global_to(guild=guild)
+            
+            # 2. Clear global commands from the tree (so we can sync an empty list globally)
+            self.tree.clear_commands(guild=None)
+            
             try:
+                # 3. Sync to the guild
                 synced = await self.tree.sync(guild=guild)
                 logger.info(f'Synced {len(synced)} command(s) to guild {GUILD_ID}')
+                
+                # 4. Sync globally (now empty) to remove old global commands
+                await self.tree.sync(guild=None)
+                logger.info('Cleared global commands to prevent duplicates.')
+                
             except Exception as e:
-                logger.error(f'Failed to sync commands to guild: {e}')
+                logger.error(f'Failed to sync commands: {e}')
         else:
             # Global sync (can take up to 1 hour)
             try:
