@@ -7,14 +7,19 @@ import logging
 import aiohttp
 import asyncio
 import datetime
-from google import genai
-from google.genai import types
+import re
+import g4f
+from g4f.client import Client
 
 # Configure logging
 logger = logging.getLogger('discord')
 
 MOD_CONFIG_FILE = 'mod_config.json'
-GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
+
+# Simple local fallback list for high-severity words
+BAD_WORDS = [
+    "nigger", "faggot", "retard", "kys", "kill yourself", "rape"
+]
 
 def load_mod_config():
     if not os.path.exists(MOD_CONFIG_FILE):
@@ -29,65 +34,57 @@ def save_mod_config(config):
 class AutoModerationCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.client = None
-        if GEMINI_API_KEY:
-            try:
-                self.client = genai.Client(api_key=GEMINI_API_KEY)
-                logger.info("Gemini AI Client initialized for AutoMod.")
-            except Exception as e:
-                logger.error(f"Failed to initialize Gemini Client for AutoMod: {e}")
-        else:
-            logger.warning("GEMINI_API_KEY not found. AutoMod will be limited.")
+        self.client = Client()
+        logger.info("G4F AI Client initialized for AutoMod (Free Mode).")
 
-    async def check_content_safety(self, text_content=None, image_bytes=None, mime_type=None):
+    async def check_content_safety(self, text_content=None, image_url=None):
         """
-        Uses Gemini to check for NSFW or severe toxicity.
+        Uses G4F (Free AI) to check for NSFW or severe toxicity.
         Returns a tuple: (is_unsafe, reason, severity)
         Severity: 'high' (NSFW/Gore) or 'medium' (Swears/Toxicity)
         """
-        if not self.client:
-            return False, None, None
-
         try:
-            contents = []
-            parts = []
+            # 1. Local Check (Fast & Free)
+            if text_content:
+                for word in BAD_WORDS:
+                    if re.search(r'\b' + re.escape(word) + r'\b', text_content, re.IGNORECASE):
+                        return True, "Detected banned word", "medium"
+
+            # 2. AI Check using G4F
+            messages = []
             
-            # System Instruction
-            sys_instruct = "You are a strict content moderation AI. Your job is to detect NSFW (pornography, nudity, sexually explicit content), severe gore, and high-level profanity/hate speech. Return ONLY 'UNSAFE: [Reason]: [Severity]' if the content violates these rules. Severity must be 'HIGH' for NSFW/Gore and 'MEDIUM' for Profanity/Hate Speech. Return 'SAFE' if it is acceptable. Be concise."
+            sys_instruct = "You are a content moderation AI. Detect NSFW (pornography, nudity), severe gore, and high-level profanity/hate speech. Return ONLY 'UNSAFE: [Reason]: [Severity]' if violated. Severity: 'HIGH' (NSFW/Gore), 'MEDIUM' (Profanity). Return 'SAFE' if ok."
+            
+            messages.append({"role": "system", "content": sys_instruct})
 
             if text_content:
-                parts.append(types.Part.from_text(text=f"Analyze this text for severe toxicity, hate speech, or explicit sexual content: {text_content}"))
+                messages.append({"role": "user", "content": f"Analyze text: {text_content}"})
             
-            if image_bytes:
-                parts.append(types.Part.from_bytes(data=image_bytes, mime_type=mime_type))
-                parts.append(types.Part.from_text(text="Analyze this image/gif. Is it NSFW, pornographic, or contain severe gore?"))
-
-            if not parts:
-                return False, None, None
-
-            contents.append(types.Content(role="user", parts=parts))
+            # Note: G4F image analysis is experimental and provider-dependent. 
+            # We pass the URL if available, some providers might scrape it.
+            if image_url:
+                messages.append({"role": "user", "content": f"Analyze this image URL for NSFW/Gore: {image_url}"})
 
             response = await asyncio.to_thread(
-                self.client.models.generate_content,
-                model='gemini-2.0-flash',
-                contents=contents,
-                config=types.GenerateContentConfig(
-                    system_instruction=sys_instruct,
-                    temperature=0.0 # Deterministic
-                )
+                self.client.chat.completions.create,
+                model="gpt-4o-mini", # Lightweight model
+                messages=messages,
+                ignored=["Bing"] # Bing often requires auth/cookies
             )
             
-            result = response.text.strip()
-            if result.startswith("UNSAFE"):
+            result = response.choices[0].message.content.strip()
+            
+            if "UNSAFE" in result:
                 # Parse result: UNSAFE: Reason: Severity
                 parts = result.split(":")
                 reason = parts[1].strip() if len(parts) > 1 else "Violation"
                 severity = parts[2].strip().lower() if len(parts) > 2 else "medium"
                 return True, reason, severity
+                
             return False, None, None
 
         except Exception as e:
-            logger.error(f"AutoMod AI Error: {e}")
+            logger.error(f"AutoMod G4F Error: {e}")
             return False, None, None
 
     @commands.Cog.listener()
@@ -113,21 +110,13 @@ class AutoModerationCog(commands.Cog):
 
         # Check Attachments (Images/GIFs)
         for attachment in message.attachments:
-            if attachment.content_type and (attachment.content_type.startswith('image') or attachment.content_type.startswith('video')): # GIFs are often video/mp4 or image/gif
+            if attachment.content_type and (attachment.content_type.startswith('image') or attachment.content_type.startswith('video')):
                 try:
-                    # Limit size to avoid memory issues (e.g., 10MB)
-                    if attachment.size > 10 * 1024 * 1024:
-                        continue
-
-                    async with aiohttp.ClientSession() as session:
-                        async with session.get(attachment.url) as resp:
-                            if resp.status == 200:
-                                data = await resp.read()
-                                is_unsafe, reason, severity = await self.check_content_safety(image_bytes=data, mime_type=attachment.content_type)
-                                if is_unsafe:
-                                    # Force HIGH severity for image violations (usually NSFW)
-                                    await self.handle_violation(message, reason, "high")
-                                    return
+                    # G4F might not handle images well, but we try passing the URL
+                    is_unsafe, reason, severity = await self.check_content_safety(image_url=attachment.url)
+                    if is_unsafe:
+                        await self.handle_violation(message, reason, "high")
+                        return
                 except Exception as e:
                     logger.error(f"Failed to scan attachment: {e}")
 
@@ -191,7 +180,7 @@ class AutoModerationCog(commands.Cog):
         save_mod_config(config)
         
         state = "ENABLED" if enabled else "DISABLED"
-        await interaction.response.send_message(f"🛡️ AI Auto Moderation has been **{state}** for this server.\nIt will scan for NSFW images/GIFs (Mute 1hr) and severe profanity (Warn).", ephemeral=True)
+        await interaction.response.send_message(f"🛡️ AI Auto Moderation has been **{state}** for this server.\nUsing Free AI (G4F) + Local Filters.", ephemeral=True)
 
 async def setup(bot):
     await bot.add_cog(AutoModerationCog(bot))
