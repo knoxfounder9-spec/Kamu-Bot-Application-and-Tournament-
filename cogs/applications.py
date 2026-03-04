@@ -81,14 +81,14 @@ def generate_panel_embeds(guild_id):
     # Embed 2: Status
     embed2 = discord.Embed(
         description=(
-            "We are seeking dedicated and skilled individuals to join our ranks. "
+            "> We are seeking dedicated and skilled individuals to join our ranks. "
             "Please review the available positions below and select the role that best aligns with your expertise and interests.\n\n"
             "### Available Positions:\n"
-            f"• **Grind Team:** {get_emoji(status_grind)}\n"
-            f"• **Recruiter Team:** {get_emoji(status_recruiter)}\n"
-            f"• **Trainers:** {get_emoji(status_trainers)}\n"
-            f"• **Support Team:** {get_emoji(status_support)}\n\n"
-            "Select an option from the dropdown menu to begin your application process."
+            f"> • **Grind Team:** {get_emoji(status_grind)}\n"
+            f"> • **Recruiter Team:** {get_emoji(status_recruiter)}\n"
+            f"> • **Trainers:** {get_emoji(status_trainers)}\n"
+            f"> • **Support Team:** {get_emoji(status_support)}\n\n"
+            "> Select an option from the dropdown menu to begin your application process."
         ),
         color=color
     )

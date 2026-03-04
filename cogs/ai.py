@@ -118,6 +118,7 @@ class AICog(commands.Cog):
         # --- G4F (Fallback / No Key) ---
         else:
             # List of providers to try in order
+            # Note: g4f.Provider attributes might change. Using string names or safer access.
             providers = [
                 g4f.Provider.Blackbox,
                 g4f.Provider.DuckDuckGo,
@@ -159,7 +160,8 @@ class AICog(commands.Cog):
                     return text
 
                 except Exception as e:
-                    provider_name = provider.__name__ if provider else "Auto"
+                    # provider might be None or an object
+                    provider_name = getattr(provider, "__name__", "Auto")
                     logger.warning(f"g4f Provider {provider_name} failed: {e}")
                     last_error = e
                     continue # Try next provider
