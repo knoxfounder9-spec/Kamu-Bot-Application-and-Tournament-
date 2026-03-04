@@ -3,10 +3,16 @@ from discord.ext import commands
 import os
 import asyncio
 from dotenv import load_dotenv
+import logging
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger('discord')
 
 load_dotenv()
 
 TOKEN = os.getenv('DISCORD_TOKEN')
+GUILD_ID = os.getenv('GUILD_ID')
 
 class KamuBot(commands.Bot):
     def __init__(self):
@@ -27,27 +33,48 @@ class KamuBot(commands.Bot):
                 if filename.endswith('.py') and not filename.startswith('__'):
                     try:
                         await self.load_extension(f'cogs.{filename[:-3]}')
-                        print(f'Loaded extension: cogs.{filename[:-3]}')
+                        logger.info(f'Loaded extension: cogs.{filename[:-3]}')
                     except Exception as e:
-                        print(f'Failed to load extension cogs.{filename[:-3]}: {e}')
+                        logger.error(f'Failed to load extension cogs.{filename[:-3]}: {e}')
         else:
-            print("No cogs directory found.")
+            logger.warning("No cogs directory found.")
         
         # Sync commands
-        try:
-            synced = await self.tree.sync()
-            print(f'Synced {len(synced)} command(s)')
-        except Exception as e:
-            print(f'Failed to sync commands: {e}')
+        # If GUILD_ID is set, sync to that guild for instant updates
+        if GUILD_ID:
+            guild = discord.Object(id=int(GUILD_ID))
+            self.tree.copy_global_to(guild=guild)
+            try:
+                synced = await self.tree.sync(guild=guild)
+                logger.info(f'Synced {len(synced)} command(s) to guild {GUILD_ID}')
+            except Exception as e:
+                logger.error(f'Failed to sync commands to guild: {e}')
+        else:
+            # Global sync (can take up to 1 hour)
+            try:
+                synced = await self.tree.sync()
+                logger.info(f'Synced {len(synced)} command(s) globally')
+            except Exception as e:
+                logger.error(f'Failed to sync commands globally: {e}')
 
     async def on_ready(self):
-        print(f'Logged in as {self.user} (ID: {self.user.id})')
-        print('------')
+        logger.info(f'Logged in as {self.user} (ID: {self.user.id})')
+        logger.info('------')
 
 bot = KamuBot()
 
+@bot.command()
+@commands.is_owner()
+async def sync(ctx):
+    """Syncs slash commands manually."""
+    try:
+        synced = await bot.tree.sync()
+        await ctx.send(f"Synced {len(synced)} commands globally.")
+    except Exception as e:
+        await ctx.send(f"Failed to sync: {e}")
+
 if __name__ == '__main__':
     if not TOKEN:
-        print("Error: DISCORD_TOKEN not found in .env")
+        logger.error("Error: DISCORD_TOKEN not found in .env")
     else:
         bot.run(TOKEN)
