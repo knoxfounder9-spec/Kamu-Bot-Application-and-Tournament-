@@ -41,42 +41,71 @@ class GrindingCog(commands.Cog):
         save_grind_stats(stats)
         return stats[user_key]
 
-    @app_commands.command(name="helpgrinding", description="Request help from the Grind Team (Creates a private channel)")
+    @app_commands.command(name="helpgrinding", description="Request help from the Grind Team")
     async def helpgrinding(self, interaction: discord.Interaction):
-        guild = interaction.guild
-        user = interaction.user
-        
-        # Find Grind Team role
-        grind_role = discord.utils.get(guild.roles, name=GRIND_TEAM_ROLE_NAME)
-        if not grind_role:
-            # Try to find it case-insensitive if exact match fails
-            for r in guild.roles:
-                if r.name.lower() == GRIND_TEAM_ROLE_NAME.lower():
-                    grind_role = r
-                    break
-        
-        if not grind_role:
-            await interaction.response.send_message(f"Error: Role '{GRIND_TEAM_ROLE_NAME}' not found in this server.", ephemeral=True)
-            return
+        # Create a view with a select menu
+        class GrindTypeView(discord.ui.View):
+            def __init__(self, bot_ref):
+                super().__init__(timeout=60)
+                self.bot_ref = bot_ref
 
-        # Create permissions
-        overwrites = {
-            guild.default_role: discord.PermissionOverwrite(read_messages=False),
-            user: discord.PermissionOverwrite(read_messages=True, send_messages=True),
-            grind_role: discord.PermissionOverwrite(read_messages=True, send_messages=True),
-            guild.me: discord.PermissionOverwrite(read_messages=True, send_messages=True)
-        }
+            @discord.ui.select(
+                placeholder="Select the type of help you need...",
+                options=[
+                    discord.SelectOption(label="WorldBoss", description="Help with World Bosses", emoji="🌍"),
+                    discord.SelectOption(label="Quests", description="Help with Quests", emoji="📜"),
+                    discord.SelectOption(label="Raids", description="Help with Raids", emoji="⚔️"),
+                ]
+            )
+            async def select_callback(self, interaction: discord.Interaction, select: discord.ui.Select):
+                guild = interaction.guild
+                user = interaction.user
+                grind_type = select.values[0]
+                
+                # Find Grind Team role
+                grind_role = discord.utils.get(guild.roles, name=GRIND_TEAM_ROLE_NAME)
+                if not grind_role:
+                    for r in guild.roles:
+                        if r.name.lower() == GRIND_TEAM_ROLE_NAME.lower():
+                            grind_role = r
+                            break
+                
+                if not grind_role:
+                    await interaction.response.send_message(f"Error: Role '{GRIND_TEAM_ROLE_NAME}' not found.", ephemeral=True)
+                    return
 
-        # Create channel
-        category = discord.utils.get(guild.categories, name="Grind Tickets")
-        if not category:
-            category = await guild.create_category("Grind Tickets")
+                # Create permissions
+                overwrites = {
+                    guild.default_role: discord.PermissionOverwrite(read_messages=False),
+                    user: discord.PermissionOverwrite(read_messages=True, send_messages=True),
+                    grind_role: discord.PermissionOverwrite(read_messages=True, send_messages=True),
+                    guild.me: discord.PermissionOverwrite(read_messages=True, send_messages=True)
+                }
 
-        channel_name = f"grind-help-{user.name}"
-        channel = await guild.create_text_channel(channel_name, category=category, overwrites=overwrites)
+                # Create category if needed
+                category = discord.utils.get(guild.categories, name="Grind Tickets")
+                if not category:
+                    category = await guild.create_category("Grind Tickets")
 
-        await interaction.response.send_message(f"Created a private channel for you: {channel.mention}", ephemeral=True)
-        await channel.send(f"{user.mention} needs help! {grind_role.mention}, please assist.")
+                # Generate channel name: user-type-number
+                # We need a unique number. Let's count existing channels in category or just use a random/increment.
+                # Simple approach: Count channels starting with user-type
+                count = 1
+                base_name = f"{user.name}-{grind_type}".lower().replace(" ", "-")
+                for channel in category.text_channels:
+                    if channel.name.startswith(base_name):
+                        count += 1
+                
+                channel_name = f"{base_name}-{count}"
+                
+                try:
+                    channel = await guild.create_text_channel(channel_name, category=category, overwrites=overwrites)
+                    await interaction.response.send_message(f"Ticket created: {channel.mention}", ephemeral=True)
+                    await channel.send(f"{user.mention} needs help with **{grind_type}**! {grind_role.mention}, please assist.")
+                except Exception as e:
+                    await interaction.response.send_message(f"Failed to create channel: {e}", ephemeral=True)
+
+        await interaction.response.send_message("Please select the type of grinding help you need:", view=GrindTypeView(self.bot), ephemeral=True)
 
     # --- Win Management ---
 
