@@ -40,9 +40,11 @@ class KamuBot(commands.Bot):
             logger.warning("No cogs directory found.")
         
         # Sync commands
-        # If GUILD_ID is set, sync to that guild for instant updates
+        # If GUILD_ID is set, we ONLY sync to that guild to avoid duplicates (global + guild)
         if GUILD_ID:
             guild = discord.Object(id=int(GUILD_ID))
+            # Clear global commands to prevent duplicates if they were previously synced globally
+            self.tree.clear_commands(guild=None) 
             self.tree.copy_global_to(guild=guild)
             try:
                 synced = await self.tree.sync(guild=guild)
@@ -72,6 +74,17 @@ async def sync(ctx):
         await ctx.send(f"Synced {len(synced)} commands globally.")
     except Exception as e:
         await ctx.send(f"Failed to sync: {e}")
+
+@bot.command()
+@commands.is_owner()
+async def clear_global(ctx):
+    """Clears global slash commands."""
+    try:
+        bot.tree.clear_commands(guild=None)
+        await bot.tree.sync()
+        await ctx.send("Cleared global commands.")
+    except Exception as e:
+        await ctx.send(f"Failed to clear global commands: {e}")
 
 if __name__ == '__main__':
     if not TOKEN:
