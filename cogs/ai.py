@@ -119,12 +119,22 @@ class AICog(commands.Cog):
         else:
             # List of providers to try in order
             # Safely build the list of providers based on what's available in the installed g4f version
-            potential_providers = ['Blackbox', 'DuckDuckGo', 'PollinationsAI', 'DarkAI', 'Bing', 'OpenaiChat']
+            # We prioritize providers that usually don't require auth
+            potential_providers = [
+                'Blackbox', 
+                'DuckDuckGo', 
+                'DarkAI', 
+                'DeepInfra', 
+                'Binjie',
+                'PollinationsAI' # Moved to end as it was failing
+            ]
             providers = []
             
             for p_name in potential_providers:
                 if hasattr(g4f.Provider, p_name):
                     providers.append(getattr(g4f.Provider, p_name))
+                else:
+                    logger.debug(f"g4f Provider {p_name} not found in this version.")
             
             # Add None for Auto mode as the final fallback
             providers.append(None)
@@ -133,6 +143,9 @@ class AICog(commands.Cog):
 
             for provider in providers:
                 try:
+                    provider_name = getattr(provider, "__name__", "Auto")
+                    # logger.info(f"Trying g4f provider: {provider_name}")
+
                     # Construct messages for g4f
                     messages = [{"role": "system", "content": f"You are a {persona}. You are talking to {user_name}."}]
                     for h in history_data:
@@ -144,9 +157,10 @@ class AICog(commands.Cog):
                     messages.append({"role": "user", "content": prompt})
 
                     # Use g4f
+                    # We pass model=None to let the provider pick its best default
                     response = await asyncio.to_thread(
                         g4f.ChatCompletion.create,
-                        model="gpt-4o-mini", # Often maps to a free model
+                        model=None, 
                         messages=messages,
                         provider=provider
                     )
@@ -156,13 +170,19 @@ class AICog(commands.Cog):
                     
                     if not text or len(text.strip()) == 0:
                         raise Exception("Empty response")
+                    
+                    # Check for common error strings in response
+                    if "error" in text.lower() and len(text) < 100:
+                         logger.warning(f"g4f Provider {provider_name} returned error-like text: {text}")
+                         # We might want to continue here, but sometimes it's just the AI saying "I made an error"
+                         # Let's assume if it's short and has error, it might be a system error.
+                         # But for now, let's accept it unless it's empty.
 
                     add_history(channel_id, "user", prompt)
                     add_history(channel_id, "model", text)
                     return text
 
                 except Exception as e:
-                    # provider might be None or an object
                     provider_name = getattr(provider, "__name__", "Auto")
                     logger.warning(f"g4f Provider {provider_name} failed: {e}")
                     last_error = e
