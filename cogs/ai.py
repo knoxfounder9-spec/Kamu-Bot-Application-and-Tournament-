@@ -164,7 +164,10 @@ class AICog(commands.Cog):
             messages.append({"role": "user", "content": final_prompt})
 
             # 1. Try Pollinations with different models (Expanded list)
-            pollinations_models = ["openai", "mistral", "llama", "searchgpt", "qwen", "qwen-72b"]
+            pollinations_models = [
+                "openai", "mistral", "llama", "searchgpt", "qwen", "qwen-72b",
+                "claude", "gpt-4", "p1", "midjourney", "flux"
+            ]
             for model_name in pollinations_models:
                 try:
                     async with aiohttp.ClientSession() as session:
@@ -190,9 +193,26 @@ class AICog(commands.Cog):
 
             # 2. Try G4F with a variety of models (Heavy & Lightweight)
             g4f_models = [
-                "gpt-4o", "gpt-4", "claude-3-opus", "claude-3-sonnet", 
-                "gemini-pro", "llama-3-70b", "mixtral-8x7b", "gpt-3.5-turbo",
-                "blackbox", "pi", "dalle-3"
+                # OpenAI
+                "gpt-4o", "gpt-4o-mini", "gpt-4", "gpt-4-turbo", 
+                "gpt-3.5-turbo", "gpt-3.5-turbo-16k", "gpt-3.5-turbo-0125",
+                # Anthropic
+                "claude-3-opus", "claude-3-sonnet", "claude-3-haiku", "claude-2.1", "claude-2",
+                # Google
+                "gemini-pro", "gemini-flash", "gemini-1.5-pro", "gemini-1.5-flash",
+                # Meta
+                "llama-3-70b", "llama-3-8b", "llama-2-70b", "codellama-34b", "codellama-70b",
+                # Mistral
+                "mixtral-8x7b", "mistral-7b", "mistral-medium", "mistral-large",
+                # Qwen
+                "qwen-1.5-72b", "qwen-1.5-110b", "qwen-1.5-14b", "qwen-1.5-7b",
+                # Microsoft
+                "phi-3-mini", "phi-3-medium", "phi-2",
+                # Others
+                "blackbox", "pi", "command-r", "command-r-plus", 
+                "gemma-7b", "gemma-2b", "solar-10-7b", "yi-34b",
+                "deepseek-coder", "deepseek-chat", "dalle-3",
+                "wizardlm-2-8x22b", "dbrx-instruct"
             ]
             
             for g_model in g4f_models:
