@@ -117,36 +117,56 @@ class AICog(commands.Cog):
 
         # --- G4F (Fallback / No Key) ---
         else:
-            try:
-                # Construct messages for g4f
-                messages = [{"role": "system", "content": f"You are a {persona}. You are talking to {user_name}."}]
-                for h in history_data:
-                    # g4f uses 'user' and 'assistant' usually
-                    role = "user" if h["role"] == "user" else "assistant"
-                    content = " ".join(h["parts"])
-                    messages.append({"role": role, "content": content})
-                
-                messages.append({"role": "user", "content": prompt})
+            # List of providers to try in order
+            providers = [
+                g4f.Provider.Blackbox,
+                g4f.Provider.DuckDuckGo,
+                g4f.Provider.PollinationsAI,
+                g4f.Provider.DarkAI,
+                None # Auto mode as last resort
+            ]
 
-                # Use g4f
-                # We use a provider that doesn't need auth, like Blackbox or DuckDuckGo
-                response = await asyncio.to_thread(
-                    g4f.ChatCompletion.create,
-                    model="gpt-4o-mini", # Often maps to a free model
-                    messages=messages,
-                    provider=g4f.Provider.Blackbox # Explicitly try a provider or leave auto
-                )
-                
-                # g4f returns string directly usually
-                text = str(response)
-                
-                add_history(channel_id, "user", prompt)
-                add_history(channel_id, "model", text)
-                return text
+            last_error = None
 
-            except Exception as e:
-                logger.error(f"g4f Error: {e}")
-                return "I'm having trouble thinking right now. (No API Key & Fallback failed)"
+            for provider in providers:
+                try:
+                    # Construct messages for g4f
+                    messages = [{"role": "system", "content": f"You are a {persona}. You are talking to {user_name}."}]
+                    for h in history_data:
+                        # g4f uses 'user' and 'assistant' usually
+                        role = "user" if h["role"] == "user" else "assistant"
+                        content = " ".join(h["parts"])
+                        messages.append({"role": role, "content": content})
+                    
+                    messages.append({"role": "user", "content": prompt})
+
+                    # Use g4f
+                    response = await asyncio.to_thread(
+                        g4f.ChatCompletion.create,
+                        model="gpt-4o-mini", # Often maps to a free model
+                        messages=messages,
+                        provider=provider
+                    )
+                    
+                    # g4f returns string directly usually
+                    text = str(response)
+                    
+                    if not text or len(text.strip()) == 0:
+                        raise Exception("Empty response")
+
+                    add_history(channel_id, "user", prompt)
+                    add_history(channel_id, "model", text)
+                    return text
+
+                except Exception as e:
+                    provider_name = provider.__name__ if provider else "Auto"
+                    logger.warning(f"g4f Provider {provider_name} failed: {e}")
+                    last_error = e
+                    continue # Try next provider
+            
+            # If all failed
+            logger.error(f"All g4f providers failed. Last error: {last_error}")
+            return "I'm having trouble thinking right now. (No API Key & All Fallbacks failed)"
 
     # --- Commands ---
 
