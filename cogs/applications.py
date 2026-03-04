@@ -179,7 +179,12 @@ class ApplicationReviewView(ui.View):
         
         # Notify User
         try:
-            await member.send(f"Congratulations! Your application for **{app_type}** in **{guild.name}** has been ACCEPTED!")
+            motivation = (
+                "\n\n**A message from the team:**\n"
+                "We saw great potential in your application! Now is the time to show us what you've got. "
+                "Hard work, dedication, and consistency are the keys to success here. Let's reach new heights together! 🚀"
+            )
+            await member.send(f"Congratulations! You have been accepted into **{app_type}** by {interaction.user.mention}!{motivation}")
         except:
             pass
             
