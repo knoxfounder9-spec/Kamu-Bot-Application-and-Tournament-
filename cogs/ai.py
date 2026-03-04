@@ -8,6 +8,7 @@ import json
 import logging
 import asyncio
 import g4f
+from duckduckgo_search import DDGS
 
 # Configure logging
 logger = logging.getLogger('discord')
@@ -65,6 +66,22 @@ def add_history(channel_id, role, message):
     config[str_id]["history"] = history
     save_ai_config(config)
 
+def perform_web_search(query, max_results=3):
+    """Performs a DuckDuckGo search and returns formatted results."""
+    try:
+        with DDGS() as ddgs:
+            results = list(ddgs.text(query, max_results=max_results))
+            if not results:
+                return None
+            
+            formatted_results = "Web Search Results:\n"
+            for i, res in enumerate(results, 1):
+                formatted_results += f"{i}. {res['title']}: {res['body']} (Source: {res['href']})\n"
+            return formatted_results
+    except Exception as e:
+        logger.warning(f"Web search failed: {e}")
+        return None
+
 class AICog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
@@ -83,6 +100,15 @@ class AICog(commands.Cog):
         persona = config.get("persona", "helpful assistant")
         history_data = config.get("history", [])
         
+        # --- Web Search Integration ---
+        # Perform search for every query to give "internet access"
+        # Run in thread to avoid blocking
+        search_context = await asyncio.to_thread(perform_web_search, prompt)
+        
+        final_prompt = prompt
+        if search_context:
+            final_prompt = f"{search_context}\n\nUser Query: {prompt}\n(Use the search results above to answer if relevant, otherwise answer normally.)"
+
         # --- GEMINI (Preferred) ---
         if self.client:
             try:
@@ -103,10 +129,10 @@ class AICog(commands.Cog):
                     history=contents
                 )
                 
-                response = await asyncio.to_thread(chat.send_message, prompt)
+                response = await asyncio.to_thread(chat.send_message, final_prompt)
                 text = response.text
                 
-                add_history(channel_id, "user", prompt)
+                add_history(channel_id, "user", prompt) # Store original prompt in history
                 add_history(channel_id, "model", text)
                 return text
             except Exception as e:
@@ -154,7 +180,7 @@ class AICog(commands.Cog):
                         content = " ".join(h["parts"])
                         messages.append({"role": role, "content": content})
                     
-                    messages.append({"role": "user", "content": prompt})
+                    messages.append({"role": "user", "content": final_prompt})
 
                     # Use g4f
                     # We pass model=None to let the provider pick its best default
@@ -182,7 +208,7 @@ class AICog(commands.Cog):
                     if len(text) > 2000:
                         text = text[:1997] + "..."
 
-                    add_history(channel_id, "user", prompt)
+                    add_history(channel_id, "user", prompt) # Store original prompt in history
                     add_history(channel_id, "model", text)
                     return text
 
