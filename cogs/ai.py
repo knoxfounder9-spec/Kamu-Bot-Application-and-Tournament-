@@ -101,13 +101,22 @@ class AICog(commands.Cog):
         history_data = config.get("history", [])
         
         # --- Web Search Integration ---
-        # Perform search for every query to give "internet access"
-        # Run in thread to avoid blocking
-        search_context = await asyncio.to_thread(perform_web_search, prompt)
+        # Only search if prompt seems like a question or info request to save time
+        search_context = None
+        if any(keyword in prompt.lower() for keyword in ["who", "what", "where", "when", "how", "why", "search", "news", "latest"]):
+            search_context = await asyncio.to_thread(perform_web_search, prompt)
         
         final_prompt = prompt
         if search_context:
             final_prompt = f"{search_context}\n\nUser Query: {prompt}\n(Use the search results above to answer if relevant, otherwise answer normally.)"
+
+        # System Instruction for intelligence and safety
+        sys_instruct = (
+            f"You are an advanced AI with the persona: {persona}. You are talking to {user_name}. "
+            "Be highly intelligent, helpful, and engaging. "
+            "CRITICAL: Never use '@everyone' or '@here' in your responses. "
+            "If you need to mention a user, use their name without the @ symbol if possible."
+        )
 
         # --- GEMINI (Preferred) ---
         if self.client:
@@ -117,8 +126,6 @@ class AICog(commands.Cog):
                     role = h["role"]
                     parts = h["parts"]
                     contents.append(types.Content(role=role, parts=[types.Part.from_text(text=p) for p in parts]))
-
-                sys_instruct = f"You are a {persona}. You are talking to {user_name}."
 
                 chat = self.client.chats.create(
                     model='gemini-2.0-flash',
@@ -132,20 +139,21 @@ class AICog(commands.Cog):
                 response = await asyncio.to_thread(chat.send_message, final_prompt)
                 text = response.text
                 
-                add_history(channel_id, "user", prompt) # Store original prompt in history
+                # Sanitize mentions
+                text = text.replace("@everyone", "everyone").replace("@here", "here")
+                
+                add_history(channel_id, "user", prompt)
                 add_history(channel_id, "model", text)
                 return text
             except Exception as e:
                 logger.error(f"Gemini Error: {e}")
-                # Fallthrough to g4f if Gemini fails? Or just return error?
-                # Let's return error to avoid confusion if key is present but invalid.
                 return f"Gemini Error: {e}"
 
         # --- Free AI Backend (Pollinations with G4F Fallback) ---
         else:
             # Try Pollinations first
             try:
-                messages = [{"role": "system", "content": f"You are a {persona}. You are talking to {user_name}."}]
+                messages = [{"role": "system", "content": sys_instruct}]
                 for h in history_data:
                     role = "user" if h["role"] == "user" else "assistant"
                     content = " ".join(h["parts"])
@@ -161,11 +169,13 @@ class AICog(commands.Cog):
                             "model": "openai",
                             "seed": 42
                         },
-                        timeout=15
+                        timeout=10 # Faster timeout
                     ) as resp:
                         if resp.status == 200:
                             text = await resp.text()
                             if text:
+                                # Sanitize mentions
+                                text = text.replace("@everyone", "everyone").replace("@here", "here")
                                 if len(text) > 2000:
                                     text = text[:1997] + "..."
                                 add_history(channel_id, "user", prompt)
@@ -178,8 +188,7 @@ class AICog(commands.Cog):
 
             # Fallback to G4F
             try:
-                # Construct messages for g4f
-                messages = [{"role": "system", "content": f"You are a {persona}. You are talking to {user_name}."}]
+                messages = [{"role": "system", "content": sys_instruct}]
                 for h in history_data:
                     role = "user" if h["role"] == "user" else "assistant"
                     content = " ".join(h["parts"])
@@ -188,12 +197,14 @@ class AICog(commands.Cog):
 
                 response = await asyncio.to_thread(
                     g4f.ChatCompletion.create,
-                    model=None, 
+                    model="gpt-4o-mini", 
                     messages=messages
                 )
                 text = str(response)
                 
                 if text and len(text.strip()) > 0:
+                    # Sanitize mentions
+                    text = text.replace("@everyone", "everyone").replace("@here", "here")
                     if len(text) > 2000:
                         text = text[:1997] + "..."
                     add_history(channel_id, "user", prompt)
@@ -248,12 +259,20 @@ class AICog(commands.Cog):
 
     @app_commands.command(name="ai_behaviour", description="Set the AI's personality")
     @app_commands.checks.has_permissions(administrator=True)
-    @app_commands.describe(type="The personality type (e.g., kind, smart, toxic, chill)")
-    async def ai_behaviour(self, interaction: discord.Interaction, type: str):
-        update_channel_config(interaction.channel_id, "persona", type)
+    @app_commands.describe(persona="The personality type for the AI")
+    @app_commands.choices(persona=[
+        app_commands.Choice(name="Default (Helpful Assistant)", value="helpful assistant"),
+        app_commands.Choice(name="Kind & Caring", value="kind and caring"),
+        app_commands.Choice(name="Toxic & Rude", value="toxic and rude"),
+        app_commands.Choice(name="Smart & Concise", value="smart and concise"),
+        app_commands.Choice(name="Chill & Casual", value="chill and casual"),
+        app_commands.Choice(name="Pirate", value="pirate"),
+    ])
+    async def ai_behaviour(self, interaction: discord.Interaction, persona: app_commands.Choice[str]):
+        update_channel_config(interaction.channel_id, "persona", persona.value)
         # Clear history to reset context with new persona
         update_channel_config(interaction.channel_id, "history", [])
-        await interaction.response.send_message(f"AI behaviour set to: **{type}**. Conversation history cleared.", ephemeral=True)
+        await interaction.response.send_message(f"AI behaviour set to: **{persona.name}**. Conversation history cleared.", ephemeral=True)
 
     # --- Listeners ---
 
