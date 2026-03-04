@@ -9,7 +9,7 @@ import logging
 import asyncio
 import aiohttp
 import g4f
-from duckduckgo_search import DDGS
+from ddgs import DDGS
 
 # Configure logging
 logger = logging.getLogger('discord')
@@ -115,6 +115,8 @@ class AICog(commands.Cog):
         sys_instruct = (
             f"You are an advanced AI with the persona: {persona}. You are talking to {user_name}. "
             "Be highly intelligent, helpful, and engaging. "
+            "You are a premium, unlimited AI service. Never mention being free, limited, or hosted by any specific service. "
+            "Never show advertisements or promotional content. "
             "CRITICAL RULES: "
             "1. NEVER use '@everyone' or '@here' in your responses. "
             "2. NEVER use slurs, swear words, or any form of racism. "
@@ -166,7 +168,9 @@ class AICog(commands.Cog):
             # 1. Try Pollinations with different models (Expanded list)
             pollinations_models = [
                 "openai", "mistral", "llama", "searchgpt", "qwen", "qwen-72b",
-                "claude", "gpt-4", "p1", "midjourney", "flux"
+                "claude", "gpt-4", "p1", "midjourney", "flux", "turbo", "unity", 
+                "rtist", "evil", "hyphen", "minimal", "creative", "surreal", 
+                "cyberpunk", "anime", "fantasy", "cinematic", "photography"
             ]
             for model_name in pollinations_models:
                 try:
@@ -194,25 +198,37 @@ class AICog(commands.Cog):
             # 2. Try G4F with a variety of models (Heavy & Lightweight)
             g4f_models = [
                 # OpenAI
-                "gpt-4o", "gpt-4o-mini", "gpt-4", "gpt-4-turbo", 
-                "gpt-3.5-turbo", "gpt-3.5-turbo-16k", "gpt-3.5-turbo-0125",
+                "gpt-4o", "gpt-4o-mini", "gpt-4", "gpt-4-turbo", "gpt-4-0613", "gpt-4-32k",
+                "gpt-4-0125-preview", "gpt-4-1106-preview", "gpt-4-vision-preview",
+                "gpt-3.5-turbo", "gpt-3.5-turbo-16k", "gpt-3.5-turbo-0125", "gpt-3.5-turbo-1106",
                 # Anthropic
-                "claude-3-opus", "claude-3-sonnet", "claude-3-haiku", "claude-2.1", "claude-2",
+                "claude-3-5-sonnet", "claude-3-opus", "claude-3-sonnet", "claude-3-haiku", 
+                "claude-3-5-haiku", "claude-2.1", "claude-2", "claude-instant-1.2",
                 # Google
-                "gemini-pro", "gemini-flash", "gemini-1.5-pro", "gemini-1.5-flash",
+                "gemini-pro", "gemini-flash", "gemini-1.5-pro", "gemini-1.5-flash", 
+                "gemini-1.5-flash-8b", "gemini-1.0-pro", "gemini-pro-vision",
                 # Meta
-                "llama-3-70b", "llama-3-8b", "llama-2-70b", "codellama-34b", "codellama-70b",
+                "llama-3-70b", "llama-3-8b", "llama-2-70b", "llama-2-13b", "codellama-34b", "codellama-70b",
+                "llama-3.1-405b", "llama-3.1-70b", "llama-3.1-8b", "llama-3.2-1b", "llama-3.2-3b", 
+                "llama-3.2-11b", "llama-3.2-90b",
                 # Mistral
-                "mixtral-8x7b", "mistral-7b", "mistral-medium", "mistral-large",
+                "mixtral-8x7b", "mixtral-8x22b", "mistral-7b", "mistral-medium", "mistral-large", 
+                "mistral-nemo", "mistral-tiny", "mistral-small", "open-mixtral-8x7b", "open-mixtral-8x22b",
                 # Qwen
-                "qwen-1.5-72b", "qwen-1.5-110b", "qwen-1.5-14b", "qwen-1.5-7b",
+                "qwen-1.5-72b", "qwen-1.5-110b", "qwen-1.5-14b", "qwen-1.5-7b", "qwen-2-72b", "qwen-2-7b",
+                "qwen-2.5-72b", "qwen-2.5-7b", "qwen-2.5-1.5b",
                 # Microsoft
-                "phi-3-mini", "phi-3-medium", "phi-2",
+                "phi-3-mini", "phi-3-medium", "phi-3-vision", "phi-3-small", "phi-3.5-mini", 
+                "phi-3.5-moe", "phi-2",
+                # DeepSeek
+                "deepseek-coder", "deepseek-chat", "deepseek-v2", "deepseek-v2.5", "deepseek-chat-v2",
                 # Others
                 "blackbox", "pi", "command-r", "command-r-plus", 
-                "gemma-7b", "gemma-2b", "solar-10-7b", "yi-34b",
-                "deepseek-coder", "deepseek-chat", "dalle-3",
-                "wizardlm-2-8x22b", "dbrx-instruct"
+                "gemma-7b", "gemma-2b", "gemma-2-9b", "gemma-2-27b", "gemma-2-2b",
+                "solar-10-7b", "yi-34b", "yi-1.5-34b", "yi-1.5-9b", "yi-34b-chat",
+                "dalle-3", "wizardlm-2-8x22b", "dbrx-instruct", "openchat-3.5",
+                "nous-hermes-2-mixtral-8x7b", "dolphin-2.6-mixtral-8x7b", "openchat-3.6",
+                "falcon-180b", "falcon-40b", "hermes-2-pro-llama-3-8b", "stable-diffusion-xl"
             ]
             
             for g_model in g4f_models:
@@ -297,6 +313,23 @@ class AICog(commands.Cog):
         # Clear history to reset context with new persona
         update_channel_config(interaction.channel_id, "history", [])
         await interaction.response.send_message(f"AI behaviour set to: **{persona.name}**. Conversation history cleared.", ephemeral=True)
+
+    @app_commands.command(name="ai_status", description="Check the AI's status and capabilities")
+    async def ai_status(self, interaction: discord.Interaction):
+        config = get_channel_config(interaction.channel_id)
+        enabled = "Enabled" if config.get("enabled") else "Disabled"
+        persona = config.get("persona", "helpful assistant")
+        
+        embed = discord.Embed(title="🤖 AI Status & Capabilities", color=discord.Color.blue())
+        embed.add_field(name="Status", value=enabled, inline=True)
+        embed.add_field(name="Persona", value=persona.title(), inline=True)
+        embed.add_field(name="Chat Limit", value="∞ Unlimited", inline=True)
+        embed.add_field(name="AI Models", value="100+ (Heavy & Lightweight)", inline=True)
+        embed.add_field(name="Hosting", value="Local Host (Private & Secure)", inline=True)
+        embed.add_field(name="Ads", value="None (Premium Experience)", inline=True)
+        embed.set_footer(text="Powered by KamuBot Advanced AI Engine")
+        
+        await interaction.response.send_message(embed=embed, ephemeral=True)
 
     # --- Listeners ---
 

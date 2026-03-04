@@ -4,4 +4,4 @@ google-genai
 g4f
 aiohttp
 curl_cffi
-duckduckgo-search
+ddgs

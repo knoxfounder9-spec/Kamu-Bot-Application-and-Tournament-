@@ -65,7 +65,9 @@ class AutoModerationCog(commands.Cog):
             # 1. Try Pollinations with different models (Expanded list)
             pollinations_models = [
                 "openai", "mistral", "llama", "searchgpt", "qwen", "qwen-72b",
-                "claude", "gpt-4", "p1", "midjourney", "flux"
+                "claude", "gpt-4", "p1", "midjourney", "flux", "turbo", "unity", 
+                "rtist", "evil", "hyphen", "minimal", "creative", "surreal", 
+                "cyberpunk", "anime", "fantasy", "cinematic", "photography"
             ]
             for model_name in pollinations_models:
                 try:
@@ -91,25 +93,37 @@ class AutoModerationCog(commands.Cog):
             if not result:
                 g4f_models = [
                     # OpenAI
-                    "gpt-4o", "gpt-4o-mini", "gpt-4", "gpt-4-turbo", 
-                    "gpt-3.5-turbo", "gpt-3.5-turbo-16k", "gpt-3.5-turbo-0125",
+                    "gpt-4o", "gpt-4o-mini", "gpt-4", "gpt-4-turbo", "gpt-4-0613", "gpt-4-32k",
+                    "gpt-4-0125-preview", "gpt-4-1106-preview", "gpt-4-vision-preview",
+                    "gpt-3.5-turbo", "gpt-3.5-turbo-16k", "gpt-3.5-turbo-0125", "gpt-3.5-turbo-1106",
                     # Anthropic
-                    "claude-3-opus", "claude-3-sonnet", "claude-3-haiku", "claude-2.1", "claude-2",
+                    "claude-3-5-sonnet", "claude-3-opus", "claude-3-sonnet", "claude-3-haiku", 
+                    "claude-3-5-haiku", "claude-2.1", "claude-2", "claude-instant-1.2",
                     # Google
-                    "gemini-pro", "gemini-flash", "gemini-1.5-pro", "gemini-1.5-flash",
+                    "gemini-pro", "gemini-flash", "gemini-1.5-pro", "gemini-1.5-flash", 
+                    "gemini-1.5-flash-8b", "gemini-1.0-pro", "gemini-pro-vision",
                     # Meta
-                    "llama-3-70b", "llama-3-8b", "llama-2-70b", "codellama-34b", "codellama-70b",
+                    "llama-3-70b", "llama-3-8b", "llama-2-70b", "llama-2-13b", "codellama-34b", "codellama-70b",
+                    "llama-3.1-405b", "llama-3.1-70b", "llama-3.1-8b", "llama-3.2-1b", "llama-3.2-3b", 
+                    "llama-3.2-11b", "llama-3.2-90b",
                     # Mistral
-                    "mixtral-8x7b", "mistral-7b", "mistral-medium", "mistral-large",
+                    "mixtral-8x7b", "mixtral-8x22b", "mistral-7b", "mistral-medium", "mistral-large", 
+                    "mistral-nemo", "mistral-tiny", "mistral-small", "open-mixtral-8x7b", "open-mixtral-8x22b",
                     # Qwen
-                    "qwen-1.5-72b", "qwen-1.5-110b", "qwen-1.5-14b", "qwen-1.5-7b",
+                    "qwen-1.5-72b", "qwen-1.5-110b", "qwen-1.5-14b", "qwen-1.5-7b", "qwen-2-72b", "qwen-2-7b",
+                    "qwen-2.5-72b", "qwen-2.5-7b", "qwen-2.5-1.5b",
                     # Microsoft
-                    "phi-3-mini", "phi-3-medium", "phi-2",
+                    "phi-3-mini", "phi-3-medium", "phi-3-vision", "phi-3-small", "phi-3.5-mini", 
+                    "phi-3.5-moe", "phi-2",
+                    # DeepSeek
+                    "deepseek-coder", "deepseek-chat", "deepseek-v2", "deepseek-v2.5", "deepseek-chat-v2",
                     # Others
                     "blackbox", "pi", "command-r", "command-r-plus", 
-                    "gemma-7b", "gemma-2b", "solar-10-7b", "yi-34b",
-                    "deepseek-coder", "deepseek-chat", "dalle-3",
-                    "wizardlm-2-8x22b", "dbrx-instruct"
+                    "gemma-7b", "gemma-2b", "gemma-2-9b", "gemma-2-27b", "gemma-2-2b",
+                    "solar-10-7b", "yi-34b", "yi-1.5-34b", "yi-1.5-9b", "yi-34b-chat",
+                    "dalle-3", "wizardlm-2-8x22b", "dbrx-instruct", "openchat-3.5",
+                    "nous-hermes-2-mixtral-8x7b", "dolphin-2.6-mixtral-8x7b", "openchat-3.6",
+                    "falcon-180b", "falcon-40b", "hermes-2-pro-llama-3-8b", "stable-diffusion-xl"
                 ]
                 for g_model in g4f_models:
                     try:
