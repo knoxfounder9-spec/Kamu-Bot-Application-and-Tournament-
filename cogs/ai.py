@@ -178,6 +178,10 @@ class AICog(commands.Cog):
                          # Let's assume if it's short and has error, it might be a system error.
                          # But for now, let's accept it unless it's empty.
 
+                    # Truncate to 2000 chars for Discord
+                    if len(text) > 2000:
+                        text = text[:1997] + "..."
+
                     add_history(channel_id, "user", prompt)
                     add_history(channel_id, "model", text)
                     return text
