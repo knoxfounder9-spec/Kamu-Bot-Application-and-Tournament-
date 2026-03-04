@@ -39,105 +39,90 @@ class AutoModerationCog(commands.Cog):
 
     async def check_content_safety(self, text_content=None, image_url=None):
         """
-        Uses Pollinations.ai (Free AI) to check for NSFW or severe toxicity.
+        Uses Parallel AI providers to check for NSFW or severe toxicity.
         Returns a tuple: (is_unsafe, reason, severity)
-        Severity: 'high' (NSFW/Gore) or 'medium' (Swears/Toxicity)
         """
         try:
-            # 1. Local Check (Fast & Free)
+            # 1. Local Check (Instant & Free)
             if text_content:
                 for word in BAD_WORDS:
                     if re.search(r'\b' + re.escape(word) + r'\b', text_content, re.IGNORECASE):
                         return True, "Detected banned word", "medium"
 
-            # 2. AI Check using Pollinations.ai with G4F Fallback
-            messages = []
+            # 2. AI Check using Parallel Providers
             sys_instruct = "You are a content moderation AI. Detect NSFW (pornography, nudity), severe gore, and high-level profanity/hate speech. Return ONLY 'UNSAFE: [Reason]: [Severity]' if violated. Severity: 'HIGH' (NSFW/Gore), 'MEDIUM' (Profanity). Return 'SAFE' if ok."
-            messages.append({"role": "system", "content": sys_instruct})
-
+            messages = [{"role": "system", "content": sys_instruct}]
             if text_content:
                 messages.append({"role": "user", "content": f"Analyze text: {text_content}"})
             if image_url:
                 messages.append({"role": "user", "content": f"Analyze this image URL for NSFW/Gore: {image_url}"})
 
-            result = None
-            
-            # 1. Try Pollinations with different models (Expanded list)
-            pollinations_models = [
-                "openai", "mistral", "llama", "searchgpt", "qwen", "qwen-72b",
-                "claude", "gpt-4", "p1", "midjourney", "flux", "turbo", "unity", 
-                "rtist", "evil", "hyphen", "minimal", "creative", "surreal", 
-                "cyberpunk", "anime", "fantasy", "cinematic", "photography"
-            ]
-            for model_name in pollinations_models:
+            async def try_pollinations(model):
                 try:
                     async with aiohttp.ClientSession() as session:
                         async with session.post(
                             "https://text.pollinations.ai/",
-                            json={
-                                "messages": messages,
-                                "model": model_name,
-                                "seed": 42
-                            },
-                            timeout=10
+                            json={"messages": messages, "model": model, "seed": 42},
+                            timeout=3
                         ) as resp:
                             if resp.status == 200:
                                 text = await resp.text()
                                 if text and len(text.strip()) > 2:
-                                    result = text.strip()
-                                    break
-                except Exception:
-                    continue
+                                    return text.strip()
+                except:
+                    return None
 
-            # 2. G4F Fallback with multiple models
-            if not result:
-                g4f_models = [
-                    # OpenAI
-                    "gpt-4o", "gpt-4o-mini", "gpt-4", "gpt-4-turbo", "gpt-4-0613", "gpt-4-32k",
-                    "gpt-4-0125-preview", "gpt-4-1106-preview", "gpt-4-vision-preview",
-                    "gpt-3.5-turbo", "gpt-3.5-turbo-16k", "gpt-3.5-turbo-0125", "gpt-3.5-turbo-1106",
-                    # Anthropic
-                    "claude-3-5-sonnet", "claude-3-opus", "claude-3-sonnet", "claude-3-haiku", 
-                    "claude-3-5-haiku", "claude-2.1", "claude-2", "claude-instant-1.2",
-                    # Google
-                    "gemini-pro", "gemini-flash", "gemini-1.5-pro", "gemini-1.5-flash", 
-                    "gemini-1.5-flash-8b", "gemini-1.0-pro", "gemini-pro-vision",
-                    # Meta
-                    "llama-3-70b", "llama-3-8b", "llama-2-70b", "llama-2-13b", "codellama-34b", "codellama-70b",
-                    "llama-3.1-405b", "llama-3.1-70b", "llama-3.1-8b", "llama-3.2-1b", "llama-3.2-3b", 
-                    "llama-3.2-11b", "llama-3.2-90b",
-                    # Mistral
-                    "mixtral-8x7b", "mixtral-8x22b", "mistral-7b", "mistral-medium", "mistral-large", 
-                    "mistral-nemo", "mistral-tiny", "mistral-small", "open-mixtral-8x7b", "open-mixtral-8x22b",
-                    # Qwen
-                    "qwen-1.5-72b", "qwen-1.5-110b", "qwen-1.5-14b", "qwen-1.5-7b", "qwen-2-72b", "qwen-2-7b",
-                    "qwen-2.5-72b", "qwen-2.5-7b", "qwen-2.5-1.5b",
-                    # Microsoft
-                    "phi-3-mini", "phi-3-medium", "phi-3-vision", "phi-3-small", "phi-3.5-mini", 
-                    "phi-3.5-moe", "phi-2",
-                    # DeepSeek
-                    "deepseek-coder", "deepseek-chat", "deepseek-v2", "deepseek-v2.5", "deepseek-chat-v2",
-                    # Others
-                    "blackbox", "pi", "command-r", "command-r-plus", 
-                    "gemma-7b", "gemma-2b", "gemma-2-9b", "gemma-2-27b", "gemma-2-2b",
-                    "solar-10-7b", "yi-34b", "yi-1.5-34b", "yi-1.5-9b", "yi-34b-chat",
-                    "dalle-3", "wizardlm-2-8x22b", "dbrx-instruct", "openchat-3.5",
-                    "nous-hermes-2-mixtral-8x7b", "dolphin-2.6-mixtral-8x7b", "openchat-3.6",
-                    "falcon-180b", "falcon-40b", "hermes-2-pro-llama-3-8b", "stable-diffusion-xl"
-                ]
-                for g_model in g4f_models:
-                    try:
-                        response = await asyncio.to_thread(
-                            g4f.ChatCompletion.create,
-                            model=g_model, 
-                            messages=messages
-                        )
-                        text = str(response).strip()
-                        if text and len(text) > 3:
-                            result = text
-                            break
-                    except Exception:
-                        continue
+            async def try_g4f(model):
+                try:
+                    response = await asyncio.wait_for(
+                        asyncio.to_thread(g4f.ChatCompletion.create, model=model, messages=messages),
+                        timeout=3
+                    )
+                    text = str(response).strip()
+                    if text and len(text) > 3:
+                        return text
+                except:
+                    return None
+
+            # Parallel Tier 1: Fastest Models
+            tier1_tasks = [
+                try_pollinations("openai"),
+                try_pollinations("mistral"),
+                try_g4f("gpt-4o-mini"),
+                try_g4f("gemini-1.5-flash")
+            ]
+            
+            for completed_task in asyncio.as_completed(tier1_tasks):
+                result = await completed_task
+                if result and "UNSAFE" in result:
+                    parts = result.split(":")
+                    reason = parts[1].strip() if len(parts) > 1 else "Violation"
+                    severity = parts[2].strip().lower() if len(parts) > 2 else "medium"
+                    return True, reason, severity
+                elif result == "SAFE":
+                    return False, None, None
+
+            # Parallel Tier 2: Secondary Fast Models
+            tier2_tasks = [
+                try_pollinations("qwen"),
+                try_g4f("llama-3.2-3b"),
+                try_g4f("phi-3-mini")
+            ]
+            for completed_task in asyncio.as_completed(tier2_tasks):
+                result = await completed_task
+                if result and "UNSAFE" in result:
+                    parts = result.split(":")
+                    reason = parts[1].strip() if len(parts) > 1 else "Violation"
+                    severity = parts[2].strip().lower() if len(parts) > 2 else "medium"
+                    return True, reason, severity
+                elif result == "SAFE":
+                    return False, None, None
+
+            return False, None, None
+
+        except Exception as e:
+            logger.error(f"AutoMod Error: {e}")
+            return False, None, None
             
             if result and "UNSAFE" in result:
                 # Parse result: UNSAFE: Reason: Severity

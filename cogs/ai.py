@@ -126,7 +126,7 @@ class AICog(commands.Cog):
             "If you need to mention a user, use their name without the @ symbol if possible."
         )
 
-        # --- GEMINI (Preferred) ---
+        # --- GEMINI (Preferred & Ultra Fast) ---
         if self.client:
             try:
                 contents = []
@@ -144,7 +144,8 @@ class AICog(commands.Cog):
                     history=contents
                 )
                 
-                response = await asyncio.to_thread(chat.send_message, final_prompt)
+                # Use a short timeout for Gemini too to ensure speed
+                response = await asyncio.wait_for(asyncio.to_thread(chat.send_message, final_prompt), timeout=5)
                 text = response.text
                 
                 # Sanitize mentions
@@ -156,108 +157,96 @@ class AICog(commands.Cog):
                 return text
             except Exception as e:
                 logger.error(f"Gemini Error: {e}")
-                return f"Gemini Error: {e}"
+                # Fall through to free providers if Gemini fails
 
-        # --- Free AI Backend (Multi-Provider Fallback) ---
-        else:
-            # Prepare messages with history for memory
-            messages = [{"role": "system", "content": sys_instruct}]
-            for h in history_data:
-                role = "user" if h["role"] == "user" else "assistant"
-                content = " ".join(h["parts"])
-                messages.append({"role": role, "content": content})
-            messages.append({"role": "user", "content": final_prompt})
+        # --- Free AI Backend (Parallel Fast Fallback) ---
+        # Prepare messages with history for memory
+        messages = [{"role": "system", "content": sys_instruct}]
+        for h in history_data:
+            role = "user" if h["role"] == "user" else "assistant"
+            content = " ".join(h["parts"])
+            messages.append({"role": role, "content": content})
+        messages.append({"role": "user", "content": final_prompt})
 
-            # 1. Try Pollinations with different models (Expanded list)
-            pollinations_models = [
-                "openai", "mistral", "llama", "searchgpt", "qwen", "qwen-72b",
-                "claude", "gpt-4", "p1", "midjourney", "flux", "turbo", "unity", 
-                "rtist", "evil", "hyphen", "minimal", "creative", "surreal", 
-                "cyberpunk", "anime", "fantasy", "cinematic", "photography"
-            ]
-            for model_name in pollinations_models:
-                try:
-                    async with aiohttp.ClientSession() as session:
-                        async with session.post(
-                            "https://text.pollinations.ai/",
-                            json={
-                                "messages": messages,
-                                "model": model_name,
-                                "seed": 42
-                            },
-                            timeout=5
-                        ) as resp:
-                            if resp.status == 200:
-                                text = await resp.text()
-                                if text and len(text.strip()) > 2:
-                                    text = text.replace("@everyone", "everyone").replace("@here", "here")
-                                    text = re.sub(r'<@&?\d+>', '', text) # Remove user/role pings
-                                    if len(text) > 2000: text = text[:1997] + "..."
-                                    add_history(channel_id, "user", prompt)
-                                    add_history(channel_id, "model", text)
-                                    return text
-                except Exception:
-                    continue
+        async def try_pollinations(model):
+            try:
+                async with aiohttp.ClientSession() as session:
+                    async with session.post(
+                        "https://text.pollinations.ai/",
+                        json={"messages": messages, "model": model, "seed": 42},
+                        timeout=3
+                    ) as resp:
+                        if resp.status == 200:
+                            text = await resp.text()
+                            if text and len(text.strip()) > 2:
+                                return text
+            except:
+                return None
 
-            # 2. Try G4F with a variety of models (Prioritizing Fast Models)
-            g4f_models = [
-                # Fast Models First
-                "gpt-4o-mini", "gemini-1.5-flash", "llama-3.2-3b", "phi-3-mini", "gemini-1.5-flash-8b",
-                "gpt-3.5-turbo-0125", "mistral-tiny", "qwen-2.5-7b", "gemma-2-2b",
-                # OpenAI
-                "gpt-4o", "gpt-4", "gpt-4-turbo", "gpt-4-0613", "gpt-4-32k",
-                "gpt-4-0125-preview", "gpt-4-1106-preview", "gpt-4-vision-preview",
-                "gpt-3.5-turbo", "gpt-3.5-turbo-16k", "gpt-3.5-turbo-1106",
-                # Anthropic
-                "claude-3-5-sonnet", "claude-3-opus", "claude-3-sonnet", "claude-3-haiku", 
-                "claude-3-5-haiku", "claude-2.1", "claude-2", "claude-instant-1.2",
-                # Google
-                "gemini-pro", "gemini-1.5-pro", "gemini-1.0-pro", "gemini-pro-vision",
-                # Meta
-                "llama-3-70b", "llama-3-8b", "llama-2-70b", "llama-2-13b", "codellama-34b", "codellama-70b",
-                "llama-3.1-405b", "llama-3.1-70b", "llama-3.1-8b", "llama-3.2-1b", 
-                "llama-3.2-11b", "llama-3.2-90b",
-                # Mistral
-                "mixtral-8x7b", "mixtral-8x22b", "mistral-7b", "mistral-medium", "mistral-large", 
-                "mistral-nemo", "mistral-small", "open-mixtral-8x7b", "open-mixtral-8x22b",
-                # Qwen
-                "qwen-1.5-72b", "qwen-1.5-110b", "qwen-1.5-14b", "qwen-1.5-7b", "qwen-2-72b", "qwen-2-7b",
-                "qwen-2.5-72b", "qwen-2.5-1.5b",
-                # Microsoft
-                "phi-3-medium", "phi-3-vision", "phi-3-small", "phi-3.5-mini", 
-                "phi-3.5-moe", "phi-2",
-                # DeepSeek
-                "deepseek-coder", "deepseek-chat", "deepseek-v2", "deepseek-v2.5", "deepseek-chat-v2",
-                # Others
-                "blackbox", "pi", "command-r", "command-r-plus", 
-                "gemma-7b", "gemma-2b", "gemma-2-9b", "gemma-2-27b",
-                "solar-10-7b", "yi-34b", "yi-1.5-34b", "yi-1.5-9b", "yi-34b-chat",
-                "dalle-3", "wizardlm-2-8x22b", "dbrx-instruct", "openchat-3.5",
-                "nous-hermes-2-mixtral-8x7b", "dolphin-2.6-mixtral-8x7b", "openchat-3.6",
-                "falcon-180b", "falcon-40b", "hermes-2-pro-llama-3-8b", "stable-diffusion-xl"
-            ]
-            
-            for g_model in g4f_models:
-                try:
-                    response = await asyncio.to_thread(
-                        g4f.ChatCompletion.create,
-                        model=g_model, 
-                        messages=messages
-                    )
-                    text = str(response)
-                    if text and len(text.strip()) > 5: # Minimal length check
-                        text = text.replace("@everyone", "everyone").replace("@here", "here")
-                        text = re.sub(r'<@&?\d+>', '', text) # Remove user/role pings
-                        if len(text) > 2000: text = text[:1997] + "..."
-                        add_history(channel_id, "user", prompt)
-                        add_history(channel_id, "model", text)
-                        return text
-                except Exception:
-                    continue
+        async def try_g4f(model):
+            try:
+                # Use a very short timeout for g4f to keep things "instant"
+                response = await asyncio.wait_for(
+                    asyncio.to_thread(g4f.ChatCompletion.create, model=model, messages=messages),
+                    timeout=3
+                )
+                text = str(response)
+                if text and len(text.strip()) > 5:
+                    return text
+            except:
+                return None
 
-            # If all failed, return None instead of an error message
-            logger.error(f"All AI providers failed for channel {channel_id}")
-            return None
+        # Tier 1: Ultra Fast Models (Parallel)
+        tier1_tasks = [
+            try_pollinations("openai"),
+            try_pollinations("mistral"),
+            try_g4f("gpt-4o-mini"),
+            try_g4f("gemini-1.5-flash"),
+            try_g4f("llama-3.2-3b")
+        ]
+        
+        for completed_task in asyncio.as_completed(tier1_tasks):
+            result = await completed_task
+            if result:
+                text = result.replace("@everyone", "everyone").replace("@here", "here")
+                text = re.sub(r'<@&?\d+>', '', text)
+                if len(text) > 2000: text = text[:1997] + "..."
+                add_history(channel_id, "user", prompt)
+                add_history(channel_id, "model", text)
+                return text
+
+        # Tier 2: Secondary Fast Models (Parallel)
+        tier2_tasks = [
+            try_pollinations("qwen"),
+            try_pollinations("llama"),
+            try_g4f("phi-3-mini"),
+            try_g4f("gpt-3.5-turbo-0125"),
+            try_g4f("mistral-tiny")
+        ]
+        
+        for completed_task in asyncio.as_completed(tier2_tasks):
+            result = await completed_task
+            if result:
+                text = result.replace("@everyone", "everyone").replace("@here", "here")
+                text = re.sub(r'<@&?\d+>', '', text)
+                if len(text) > 2000: text = text[:1997] + "..."
+                add_history(channel_id, "user", prompt)
+                add_history(channel_id, "model", text)
+                return text
+
+        # Tier 3: Broad Fallback (Sequential but fast)
+        # This is the "100+ models" safety net
+        all_models = ["qwen-72b", "claude", "gpt-4", "p1", "turbo", "unity", "rtist", "evil", "hyphen"]
+        for m in all_models:
+            res = await try_pollinations(m)
+            if res:
+                text = res.replace("@everyone", "everyone").replace("@here", "here")
+                text = re.sub(r'<@&?\d+>', '', text)
+                add_history(channel_id, "user", prompt)
+                add_history(channel_id, "model", text)
+                return text
+
+        return None
 
     # --- Commands ---
 
