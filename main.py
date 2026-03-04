@@ -22,9 +22,16 @@ class KamuBot(commands.Bot):
 
     async def setup_hook(self):
         # Load cogs
-        for filename in os.listdir('./src/cogs'):
-            if filename.endswith('.py') and not filename.startswith('__'):
-                await self.load_extension(f'src.cogs.{filename[:-3]}')
+        if os.path.exists('./cogs'):
+            for filename in os.listdir('./cogs'):
+                if filename.endswith('.py') and not filename.startswith('__'):
+                    try:
+                        await self.load_extension(f'cogs.{filename[:-3]}')
+                        print(f'Loaded extension: cogs.{filename[:-3]}')
+                    except Exception as e:
+                        print(f'Failed to load extension cogs.{filename[:-3]}: {e}')
+        else:
+            print("No cogs directory found.")
         
         # Sync commands
         try:

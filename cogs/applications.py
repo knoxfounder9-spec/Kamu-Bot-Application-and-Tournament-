@@ -9,9 +9,8 @@ LOG_CHANNEL_ID = os.getenv('LOG_CHANNEL_ID')
 # --- Modals ---
 
 class GrindTeamModal(ui.Modal, title='Grind Team Application'):
-    def __init__(self, bot):
+    def __init__(self):
         super().__init__()
-        self.bot = bot
 
     level_progression = ui.TextInput(
         label='Current Level / Progression',
@@ -54,7 +53,7 @@ class GrindTeamModal(ui.Modal, title='Grind Team Application'):
     )
 
     async def on_submit(self, interaction: discord.Interaction):
-        await send_application_log(self.bot, interaction, "Grind Team", [
+        await send_application_log(interaction, "Grind Team", [
             ("Current Level / Progression", self.level_progression.value),
             ("Game Knowledge", self.game_knowledge.value),
             ("Helping Experience", self.helping_experience.value),
@@ -63,9 +62,8 @@ class GrindTeamModal(ui.Modal, title='Grind Team Application'):
         ])
 
 class RecruiterTeamModal(ui.Modal, title='Recruiter Team Application'):
-    def __init__(self, bot):
+    def __init__(self):
         super().__init__()
-        self.bot = bot
 
     motivation = ui.TextInput(
         label='Why do you want to be a recruiter?',
@@ -102,7 +100,7 @@ class RecruiterTeamModal(ui.Modal, title='Recruiter Team Application'):
     )
 
     async def on_submit(self, interaction: discord.Interaction):
-        await send_application_log(self.bot, interaction, "Recruiter Team", [
+        await send_application_log(interaction, "Recruiter Team", [
             ("Motivation", self.motivation.value),
             ("Invites Count", self.invites_count.value),
             ("Pitch", self.pitch.value),
@@ -111,9 +109,8 @@ class RecruiterTeamModal(ui.Modal, title='Recruiter Team Application'):
         ])
 
 class SupportTeamModal(ui.Modal, title='Support Team Application'):
-    def __init__(self, bot):
+    def __init__(self):
         super().__init__()
-        self.bot = bot
 
     familiarity = ui.TextInput(
         label='Familiarity with Server',
@@ -151,7 +148,7 @@ class SupportTeamModal(ui.Modal, title='Support Team Application'):
     )
 
     async def on_submit(self, interaction: discord.Interaction):
-        await send_application_log(self.bot, interaction, "Support Team", [
+        await send_application_log(interaction, "Support Team", [
             ("Familiarity", self.familiarity.value),
             ("Handling Confusion", self.handling_confusion.value),
             ("Experience", self.experience.value),
@@ -160,9 +157,8 @@ class SupportTeamModal(ui.Modal, title='Support Team Application'):
         ])
 
 class TrainersModalPart2(ui.Modal, title='Trainers App (Part 2/2)'):
-    def __init__(self, bot, part1_data):
+    def __init__(self, part1_data):
         super().__init__()
-        self.bot = bot
         self.part1_data = part1_data
 
     organized_engaging = ui.TextInput(
@@ -188,28 +184,27 @@ class TrainersModalPart2(ui.Modal, title='Trainers App (Part 2/2)'):
 
     async def on_submit(self, interaction: discord.Interaction):
         # Combine data
+        # part1_data is a list of tuples
         full_data = self.part1_data + [
             ("Organized & Engaging", self.organized_engaging.value),
             ("Disruptive Handling", self.disruptive_handling.value),
             ("Experience", self.experience.value)
         ]
         
-        await send_application_log(self.bot, interaction, "Trainers", full_data)
+        await send_application_log(interaction, "Trainers", full_data)
 
 class ContinueTrainersView(ui.View):
-    def __init__(self, bot, part1_data):
+    def __init__(self, part1_data):
         super().__init__(timeout=600)
-        self.bot = bot
         self.part1_data = part1_data
 
     @ui.button(label="Continue to Part 2", style=discord.ButtonStyle.primary)
     async def continue_button(self, interaction: discord.Interaction, button: ui.Button):
-        await interaction.response.send_modal(TrainersModalPart2(self.bot, self.part1_data))
+        await interaction.response.send_modal(TrainersModalPart2(self.part1_data))
 
 class TrainersModalPart1(ui.Modal, title='Trainers App (Part 1/2)'):
-    def __init__(self, bot):
+    def __init__(self):
         super().__init__()
-        self.bot = bot
 
     motivation = ui.TextInput(
         label='Why Trainer / Suitability',
@@ -245,13 +240,13 @@ class TrainersModalPart1(ui.Modal, title='Trainers App (Part 1/2)'):
         ]
         await interaction.response.send_message(
             "Part 1 received! Please click the button below to complete Part 2.",
-            view=ContinueTrainersView(self.bot, part1_data),
+            view=ContinueTrainersView(part1_data),
             ephemeral=True
         )
 
 # --- Helper Functions ---
 
-async def send_application_log(bot, interaction: discord.Interaction, app_type: str, fields: list):
+async def send_application_log(interaction: discord.Interaction, app_type: str, fields: list):
     embed = discord.Embed(
         title=f"New {app_type} Application",
         color=discord.Color.blue(),
@@ -284,8 +279,7 @@ async def send_application_log(bot, interaction: discord.Interaction, app_type: 
 # --- Views ---
 
 class ApplicationSelect(ui.Select):
-    def __init__(self, bot):
-        self.bot = bot
+    def __init__(self):
         options = [
             discord.SelectOption(label="Grind Team App", description="Apply for the Grind Team", emoji="⚔️"),
             discord.SelectOption(label="Recruiter App", description="Apply for the Recruiter Team", emoji="📢"),
@@ -298,18 +292,18 @@ class ApplicationSelect(ui.Select):
         choice = self.values[0]
         
         if choice == "Grind Team App":
-            await interaction.response.send_modal(GrindTeamModal(self.bot))
+            await interaction.response.send_modal(GrindTeamModal())
         elif choice == "Recruiter App":
-            await interaction.response.send_modal(RecruiterTeamModal(self.bot))
+            await interaction.response.send_modal(RecruiterTeamModal())
         elif choice == "Trainers App":
-            await interaction.response.send_modal(TrainersModalPart1(self.bot))
+            await interaction.response.send_modal(TrainersModalPart1())
         elif choice == "Support Team App":
-            await interaction.response.send_modal(SupportTeamModal(self.bot))
+            await interaction.response.send_modal(SupportTeamModal())
 
 class ApplicationView(ui.View):
-    def __init__(self, bot):
+    def __init__(self):
         super().__init__(timeout=None) # Persistent view
-        self.add_item(ApplicationSelect(bot))
+        self.add_item(ApplicationSelect())
 
 # --- Cog ---
 
@@ -318,7 +312,7 @@ class Applications(commands.Cog):
         self.bot = bot
 
     async def cog_load(self):
-        self.bot.add_view(ApplicationView(self.bot))
+        self.bot.add_view(ApplicationView())
 
     @app_commands.command(name="panel", description="Creates the application panel")
     @app_commands.checks.has_permissions(administrator=True)
@@ -331,7 +325,7 @@ class Applications(commands.Cog):
         embed.set_footer(text="Kamu Guild • Kaizen")
         embed.set_thumbnail(url=interaction.guild.icon.url if interaction.guild.icon else None)
         
-        await interaction.response.send_message(embed=embed, view=ApplicationView(self.bot))
+        await interaction.response.send_message(embed=embed, view=ApplicationView())
 
 async def setup(bot):
     await bot.add_cog(Applications(bot))
