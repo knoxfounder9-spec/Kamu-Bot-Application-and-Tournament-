@@ -6,6 +6,7 @@ from google.genai import types
 import os
 import json
 import logging
+import re
 import asyncio
 import aiohttp
 import g4f
@@ -102,9 +103,9 @@ class AICog(commands.Cog):
         history_data = config.get("history", [])
         
         # --- Web Search Integration ---
-        # Only search if prompt seems like a question or info request to save time
+        # Only search if prompt explicitly asks for a search or latest info to save time
         search_context = None
-        if any(keyword in prompt.lower() for keyword in ["who", "what", "where", "when", "how", "why", "search", "news", "latest"]):
+        if any(keyword in prompt.lower() for keyword in ["search", "news", "latest", "current events"]):
             search_context = await asyncio.to_thread(perform_web_search, prompt)
         
         final_prompt = prompt
@@ -118,9 +119,10 @@ class AICog(commands.Cog):
             "You are a premium, unlimited AI service. Never mention being free, limited, or hosted by any specific service. "
             "Never show advertisements or promotional content. "
             "CRITICAL RULES: "
-            "1. NEVER use '@everyone' or '@here' in your responses. "
+            "1. NEVER use '@everyone', '@here', or any user/role pings like '<@ID>' in your responses. "
             "2. NEVER use slurs, swear words, or any form of racism. "
             "3. NEVER perform translations. If asked to translate, politely decline. "
+            "4. NEVER provide 'bad translations' or mock languages. "
             "If you need to mention a user, use their name without the @ symbol if possible."
         )
 
@@ -147,6 +149,7 @@ class AICog(commands.Cog):
                 
                 # Sanitize mentions
                 text = text.replace("@everyone", "everyone").replace("@here", "here")
+                text = re.sub(r'<@&?\d+>', '', text) # Remove user/role pings
                 
                 add_history(channel_id, "user", prompt)
                 add_history(channel_id, "model", text)
@@ -182,12 +185,13 @@ class AICog(commands.Cog):
                                 "model": model_name,
                                 "seed": 42
                             },
-                            timeout=10
+                            timeout=5
                         ) as resp:
                             if resp.status == 200:
                                 text = await resp.text()
                                 if text and len(text.strip()) > 2:
                                     text = text.replace("@everyone", "everyone").replace("@here", "here")
+                                    text = re.sub(r'<@&?\d+>', '', text) # Remove user/role pings
                                     if len(text) > 2000: text = text[:1997] + "..."
                                     add_history(channel_id, "user", prompt)
                                     add_history(channel_id, "model", text)
@@ -195,36 +199,38 @@ class AICog(commands.Cog):
                 except Exception:
                     continue
 
-            # 2. Try G4F with a variety of models (Heavy & Lightweight)
+            # 2. Try G4F with a variety of models (Prioritizing Fast Models)
             g4f_models = [
+                # Fast Models First
+                "gpt-4o-mini", "gemini-1.5-flash", "llama-3.2-3b", "phi-3-mini", "gemini-1.5-flash-8b",
+                "gpt-3.5-turbo-0125", "mistral-tiny", "qwen-2.5-7b", "gemma-2-2b",
                 # OpenAI
-                "gpt-4o", "gpt-4o-mini", "gpt-4", "gpt-4-turbo", "gpt-4-0613", "gpt-4-32k",
+                "gpt-4o", "gpt-4", "gpt-4-turbo", "gpt-4-0613", "gpt-4-32k",
                 "gpt-4-0125-preview", "gpt-4-1106-preview", "gpt-4-vision-preview",
-                "gpt-3.5-turbo", "gpt-3.5-turbo-16k", "gpt-3.5-turbo-0125", "gpt-3.5-turbo-1106",
+                "gpt-3.5-turbo", "gpt-3.5-turbo-16k", "gpt-3.5-turbo-1106",
                 # Anthropic
                 "claude-3-5-sonnet", "claude-3-opus", "claude-3-sonnet", "claude-3-haiku", 
                 "claude-3-5-haiku", "claude-2.1", "claude-2", "claude-instant-1.2",
                 # Google
-                "gemini-pro", "gemini-flash", "gemini-1.5-pro", "gemini-1.5-flash", 
-                "gemini-1.5-flash-8b", "gemini-1.0-pro", "gemini-pro-vision",
+                "gemini-pro", "gemini-1.5-pro", "gemini-1.0-pro", "gemini-pro-vision",
                 # Meta
                 "llama-3-70b", "llama-3-8b", "llama-2-70b", "llama-2-13b", "codellama-34b", "codellama-70b",
-                "llama-3.1-405b", "llama-3.1-70b", "llama-3.1-8b", "llama-3.2-1b", "llama-3.2-3b", 
+                "llama-3.1-405b", "llama-3.1-70b", "llama-3.1-8b", "llama-3.2-1b", 
                 "llama-3.2-11b", "llama-3.2-90b",
                 # Mistral
                 "mixtral-8x7b", "mixtral-8x22b", "mistral-7b", "mistral-medium", "mistral-large", 
-                "mistral-nemo", "mistral-tiny", "mistral-small", "open-mixtral-8x7b", "open-mixtral-8x22b",
+                "mistral-nemo", "mistral-small", "open-mixtral-8x7b", "open-mixtral-8x22b",
                 # Qwen
                 "qwen-1.5-72b", "qwen-1.5-110b", "qwen-1.5-14b", "qwen-1.5-7b", "qwen-2-72b", "qwen-2-7b",
-                "qwen-2.5-72b", "qwen-2.5-7b", "qwen-2.5-1.5b",
+                "qwen-2.5-72b", "qwen-2.5-1.5b",
                 # Microsoft
-                "phi-3-mini", "phi-3-medium", "phi-3-vision", "phi-3-small", "phi-3.5-mini", 
+                "phi-3-medium", "phi-3-vision", "phi-3-small", "phi-3.5-mini", 
                 "phi-3.5-moe", "phi-2",
                 # DeepSeek
                 "deepseek-coder", "deepseek-chat", "deepseek-v2", "deepseek-v2.5", "deepseek-chat-v2",
                 # Others
                 "blackbox", "pi", "command-r", "command-r-plus", 
-                "gemma-7b", "gemma-2b", "gemma-2-9b", "gemma-2-27b", "gemma-2-2b",
+                "gemma-7b", "gemma-2b", "gemma-2-9b", "gemma-2-27b",
                 "solar-10-7b", "yi-34b", "yi-1.5-34b", "yi-1.5-9b", "yi-34b-chat",
                 "dalle-3", "wizardlm-2-8x22b", "dbrx-instruct", "openchat-3.5",
                 "nous-hermes-2-mixtral-8x7b", "dolphin-2.6-mixtral-8x7b", "openchat-3.6",
@@ -241,6 +247,7 @@ class AICog(commands.Cog):
                     text = str(response)
                     if text and len(text.strip()) > 5: # Minimal length check
                         text = text.replace("@everyone", "everyone").replace("@here", "here")
+                        text = re.sub(r'<@&?\d+>', '', text) # Remove user/role pings
                         if len(text) > 2000: text = text[:1997] + "..."
                         add_history(channel_id, "user", prompt)
                         add_history(channel_id, "model", text)
@@ -265,8 +272,8 @@ class AICog(commands.Cog):
         async with ctx.typing():
             response = await self.generate_response(ctx.channel.id, prompt, ctx.author.display_name)
             if response:
-                # Use allowed_mentions to strictly prevent @everyone and @here pings
-                allowed = discord.AllowedMentions(everyone=False, roles=False, users=True)
+                # Use allowed_mentions to strictly prevent ALL pings (everyone, roles, users)
+                allowed = discord.AllowedMentions(everyone=False, roles=False, users=False)
                 await ctx.reply(response, allowed_mentions=allowed)
             # If response is None, we just don't reply (silent failure as requested)
 
@@ -355,8 +362,8 @@ class AICog(commands.Cog):
             async with message.channel.typing():
                 response = await self.generate_response(message.channel.id, prompt, message.author.display_name)
                 if response:
-                    # Use allowed_mentions to strictly prevent @everyone and @here pings
-                    allowed = discord.AllowedMentions(everyone=False, roles=False, users=True)
+                    # Use allowed_mentions to strictly prevent ALL pings (everyone, roles, users)
+                    allowed = discord.AllowedMentions(everyone=False, roles=False, users=False)
                     await message.reply(response, allowed_mentions=allowed)
 
 async def setup(bot):
