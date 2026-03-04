@@ -10,6 +10,7 @@ import time
 GRIND_STATS_FILE = 'grind_stats.json'
 GRIND_BLACKLIST_FILE = 'grind_blacklist.json'
 GRIND_TEAM_ROLE_ID = 1477359005339877446
+GRIND_TICKETS_CATEGORY_ID = 1478678699032449076
 
 def load_grind_stats():
     if not os.path.exists(GRIND_STATS_FILE):
@@ -109,6 +110,22 @@ class GrindingCog(commands.Cog):
         save_grind_stats(stats)
         return stats[user_key]
 
+    async def get_grind_category(self, guild):
+        category = guild.get_channel(GRIND_TICKETS_CATEGORY_ID)
+        if not category:
+            try:
+                category = await guild.fetch_channel(GRIND_TICKETS_CATEGORY_ID)
+            except:
+                pass
+        
+        if not isinstance(category, discord.CategoryChannel):
+            category = discord.utils.get(guild.categories, name="Grind Tickets")
+            
+        if not category:
+            category = await guild.create_category("Grind Tickets")
+            
+        return category
+
     @app_commands.command(name="helpgrinding", description="Request help from the Grind Team")
     async def helpgrinding(self, interaction: discord.Interaction):
         user = interaction.user
@@ -130,7 +147,7 @@ class GrindingCog(commands.Cog):
 
         # Check if user already has an open ticket
         guild = interaction.guild
-        category = discord.utils.get(guild.categories, name="Grind Tickets")
+        category = await self.get_grind_category(guild)
         
         if category:
             for channel in category.text_channels:
@@ -173,10 +190,8 @@ class GrindingCog(commands.Cog):
                 if grind_role:
                     overwrites[grind_role] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
 
-                # Create category if needed
-                category = discord.utils.get(guild.categories, name="Grind Tickets")
-                if not category:
-                    category = await guild.create_category("Grind Tickets")
+                # Get the correct category
+                category = await self.bot_ref.get_cog("GrindingCog").get_grind_category(guild)
 
                 # Generate channel name: user-type-number
                 count = 1
@@ -221,7 +236,7 @@ class GrindingCog(commands.Cog):
     @app_commands.command(name="helpingclose", description="Close the current ticket channel")
     async def helpingclose(self, interaction: discord.Interaction):
         # Check if we are in a ticket channel (under Grind Tickets category)
-        if not interaction.channel.category or interaction.channel.category.name != "Grind Tickets":
+        if not interaction.channel.category or (interaction.channel.category.id != GRIND_TICKETS_CATEGORY_ID and interaction.channel.category.name != "Grind Tickets"):
              await interaction.response.send_message("This command can only be used in a Grind Ticket channel.", ephemeral=True)
              return
 
