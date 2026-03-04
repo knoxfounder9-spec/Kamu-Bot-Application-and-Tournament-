@@ -37,7 +37,7 @@ class AutoModerationCog(commands.Cog):
 
     async def check_content_safety(self, text_content=None, image_url=None):
         """
-        Uses G4F (Free AI) to check for NSFW or severe toxicity.
+        Uses Pollinations.ai (Free AI) to check for NSFW or severe toxicity.
         Returns a tuple: (is_unsafe, reason, severity)
         Severity: 'high' (NSFW/Gore) or 'medium' (Swears/Toxicity)
         """
@@ -48,7 +48,7 @@ class AutoModerationCog(commands.Cog):
                     if re.search(r'\b' + re.escape(word) + r'\b', text_content, re.IGNORECASE):
                         return True, "Detected banned word", "medium"
 
-            # 2. AI Check using G4F
+            # 2. AI Check using Pollinations.ai
             messages = []
             
             sys_instruct = "You are a content moderation AI. Detect NSFW (pornography, nudity), severe gore, and high-level profanity/hate speech. Return ONLY 'UNSAFE: [Reason]: [Severity]' if violated. Severity: 'HIGH' (NSFW/Gore), 'MEDIUM' (Profanity). Return 'SAFE' if ok."
@@ -58,19 +58,24 @@ class AutoModerationCog(commands.Cog):
             if text_content:
                 messages.append({"role": "user", "content": f"Analyze text: {text_content}"})
             
-            # Note: G4F image analysis is experimental and provider-dependent. 
-            # We pass the URL if available, some providers might scrape it.
             if image_url:
                 messages.append({"role": "user", "content": f"Analyze this image URL for NSFW/Gore: {image_url}"})
 
-            response = await asyncio.to_thread(
-                self.client.chat.completions.create,
-                model="gpt-4o-mini", # Lightweight model
-                messages=messages,
-                ignored=["Bing"] # Bing often requires auth/cookies
-            )
-            
-            result = response.choices[0].message.content.strip()
+            async with aiohttp.ClientSession() as session:
+                async with session.post(
+                    "https://text.pollinations.ai/",
+                    json={
+                        "messages": messages,
+                        "model": "openai", 
+                        "seed": 42
+                    },
+                    timeout=15
+                ) as resp:
+                    if resp.status == 200:
+                        result = await resp.text()
+                        result = result.strip()
+                    else:
+                        return False, None, None
             
             if "UNSAFE" in result:
                 # Parse result: UNSAFE: Reason: Severity
@@ -82,7 +87,7 @@ class AutoModerationCog(commands.Cog):
             return False, None, None
 
         except Exception as e:
-            logger.error(f"AutoMod G4F Error: {e}")
+            logger.error(f"AutoMod Pollinations Error: {e}")
             return False, None, None
 
     @commands.Cog.listener()

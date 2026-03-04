@@ -141,86 +141,48 @@ class AICog(commands.Cog):
                 # Let's return error to avoid confusion if key is present but invalid.
                 return f"Gemini Error: {e}"
 
-        # --- G4F (Fallback / No Key) ---
+        # --- Pollinations.ai (Free, Keyless, Smooth) ---
         else:
-            # List of providers to try in order
-            # Safely build the list of providers based on what's available in the installed g4f version
-            # We prioritize providers that usually don't require auth
-            potential_providers = [
-                'Blackbox', 
-                'DuckDuckGo', 
-                'DarkAI', 
-                'DeepInfra', 
-                'Binjie',
-                'PollinationsAI' # Moved to end as it was failing
-            ]
-            providers = []
-            
-            for p_name in potential_providers:
-                if hasattr(g4f.Provider, p_name):
-                    providers.append(getattr(g4f.Provider, p_name))
-                else:
-                    logger.debug(f"g4f Provider {p_name} not found in this version.")
-            
-            # Add None for Auto mode as the final fallback
-            providers.append(None)
+            try:
+                # Construct messages
+                messages = [{"role": "system", "content": f"You are a {persona}. You are talking to {user_name}."}]
+                for h in history_data:
+                    role = "user" if h["role"] == "user" else "assistant"
+                    content = " ".join(h["parts"])
+                    messages.append({"role": role, "content": content})
+                
+                messages.append({"role": "user", "content": final_prompt})
 
-            last_error = None
+                # Call Pollinations API
+                async with aiohttp.ClientSession() as session:
+                    async with session.post(
+                        "https://text.pollinations.ai/",
+                        json={
+                            "messages": messages,
+                            "model": "openai", # Uses GPT-4o-mini usually
+                            "seed": 42 # Optional stability
+                        },
+                        timeout=30
+                    ) as resp:
+                        if resp.status == 200:
+                            text = await resp.text()
+                        else:
+                            raise Exception(f"Pollinations API status: {resp.status}")
 
-            for provider in providers:
-                try:
-                    provider_name = getattr(provider, "__name__", "Auto")
-                    # logger.info(f"Trying g4f provider: {provider_name}")
+                if not text:
+                    text = "I'm having trouble thinking right now."
 
-                    # Construct messages for g4f
-                    messages = [{"role": "system", "content": f"You are a {persona}. You are talking to {user_name}."}]
-                    for h in history_data:
-                        # g4f uses 'user' and 'assistant' usually
-                        role = "user" if h["role"] == "user" else "assistant"
-                        content = " ".join(h["parts"])
-                        messages.append({"role": role, "content": content})
-                    
-                    messages.append({"role": "user", "content": final_prompt})
+                # Truncate
+                if len(text) > 2000:
+                    text = text[:1997] + "..."
 
-                    # Use g4f
-                    # We pass model=None to let the provider pick its best default
-                    response = await asyncio.to_thread(
-                        g4f.ChatCompletion.create,
-                        model=None, 
-                        messages=messages,
-                        provider=provider
-                    )
-                    
-                    # g4f returns string directly usually
-                    text = str(response)
-                    
-                    if not text or len(text.strip()) == 0:
-                        raise Exception("Empty response")
-                    
-                    # Check for common error strings in response
-                    if "error" in text.lower() and len(text) < 100:
-                         logger.warning(f"g4f Provider {provider_name} returned error-like text: {text}")
-                         # We might want to continue here, but sometimes it's just the AI saying "I made an error"
-                         # Let's assume if it's short and has error, it might be a system error.
-                         # But for now, let's accept it unless it's empty.
+                add_history(channel_id, "user", prompt)
+                add_history(channel_id, "model", text)
+                return text
 
-                    # Truncate to 2000 chars for Discord
-                    if len(text) > 2000:
-                        text = text[:1997] + "..."
-
-                    add_history(channel_id, "user", prompt) # Store original prompt in history
-                    add_history(channel_id, "model", text)
-                    return text
-
-                except Exception as e:
-                    provider_name = getattr(provider, "__name__", "Auto")
-                    logger.warning(f"g4f Provider {provider_name} failed: {e}")
-                    last_error = e
-                    continue # Try next provider
-            
-            # If all failed
-            logger.error(f"All g4f providers failed. Last error: {last_error}")
-            return "I'm having trouble thinking right now. (No API Key & All Fallbacks failed)"
+            except Exception as e:
+                logger.error(f"Pollinations AI failed: {e}")
+                return "I'm having trouble connecting to my brain (Pollinations AI Error)."
 
     # --- Commands ---
 
