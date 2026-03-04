@@ -67,13 +67,13 @@ def generate_panel_embeds(guild_id):
         title="Kamu Guild Recruitment",
         description=(
             "### Welcome to the official recruitment portal for Kamu Guild.\n\n"
-            "Staff applications are a formal process that allows members of Kamu to apply for leadership and moderation roles within the guild. "
+            "> Staff applications are a formal process that allows members of Kamu to apply for leadership and moderation roles within the guild. "
             "These applications help ensure that only responsible, dedicated, and capable members are selected to represent and support the community.\n\n"
-            "Take your time with your application to ensure it's made to the best of your capabilities, ensure it shows initiative, commitment, and a willingness to take on more responsibility.\n\n"
+            "> Take your time with your application to ensure it's made to the best of your capabilities, ensure it shows initiative, commitment, and a willingness to take on more responsibility.\n\n"
             "**Standard Requirements:**\n\n"
-            "- Must be 14+\n"
-            "- Active In the Discord\n"
-            "- Able to work in a team"
+            "> - Must be 14+\n"
+            "> - Active In the Discord\n"
+            "> - Able to work in a team"
         ),
         color=color
     )
