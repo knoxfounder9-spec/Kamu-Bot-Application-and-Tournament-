@@ -6,7 +6,7 @@ import os
 import math
 
 GRIND_STATS_FILE = 'grind_stats.json'
-GRIND_TEAM_ROLE_NAME = "Grind Team"
+GRIND_TEAM_ROLE_ID = 1477359005339877446
 
 def load_grind_stats():
     if not os.path.exists(GRIND_STATS_FILE):
@@ -62,25 +62,19 @@ class GrindingCog(commands.Cog):
                 user = interaction.user
                 grind_type = select.values[0]
                 
-                # Find Grind Team role
-                grind_role = discord.utils.get(guild.roles, name=GRIND_TEAM_ROLE_NAME)
-                if not grind_role:
-                    for r in guild.roles:
-                        if r.name.lower() == GRIND_TEAM_ROLE_NAME.lower():
-                            grind_role = r
-                            break
+                # Find Grind Team role by ID
+                grind_role = guild.get_role(GRIND_TEAM_ROLE_ID)
                 
-                if not grind_role:
-                    await interaction.response.send_message(f"Error: Role '{GRIND_TEAM_ROLE_NAME}' not found.", ephemeral=True)
-                    return
-
                 # Create permissions
+                # User and Bot get access. Grind Team role also gets access so they can see it.
                 overwrites = {
                     guild.default_role: discord.PermissionOverwrite(read_messages=False),
                     user: discord.PermissionOverwrite(read_messages=True, send_messages=True),
-                    grind_role: discord.PermissionOverwrite(read_messages=True, send_messages=True),
                     guild.me: discord.PermissionOverwrite(read_messages=True, send_messages=True)
                 }
+                
+                if grind_role:
+                    overwrites[grind_role] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
 
                 # Create category if needed
                 category = discord.utils.get(guild.categories, name="Grind Tickets")
@@ -88,8 +82,6 @@ class GrindingCog(commands.Cog):
                     category = await guild.create_category("Grind Tickets")
 
                 # Generate channel name: user-type-number
-                # We need a unique number. Let's count existing channels in category or just use a random/increment.
-                # Simple approach: Count channels starting with user-type
                 count = 1
                 base_name = f"{user.name}-{grind_type}".lower().replace(" ", "-")
                 for channel in category.text_channels:
@@ -101,7 +93,10 @@ class GrindingCog(commands.Cog):
                 try:
                     channel = await guild.create_text_channel(channel_name, category=category, overwrites=overwrites)
                     await interaction.response.send_message(f"Ticket created: {channel.mention}", ephemeral=True)
-                    await channel.send(f"{user.mention} needs help with **{grind_type}**! {grind_role.mention}, please assist.")
+                    
+                    # Ping the role inside the channel
+                    role_mention = grind_role.mention if grind_role else "@Grind Team"
+                    await channel.send(f"{role_mention}\nYou have been summoned by {user.mention} for help with **{grind_type}**.")
                 except Exception as e:
                     await interaction.response.send_message(f"Failed to create channel: {e}", ephemeral=True)
 
@@ -111,7 +106,7 @@ class GrindingCog(commands.Cog):
 
     @app_commands.command(name="addwin", description="Add wins to a user (1 win = +5 Elo)")
     @app_commands.describe(user="The user to add wins to", amount="Number of wins")
-    @app_commands.checks.has_any_role(GRIND_TEAM_ROLE_NAME)
+    @app_commands.checks.has_permissions(administrator=True)
     async def addwin(self, interaction: discord.Interaction, user: discord.User, amount: int):
         elo_change = amount * 5
         new_stats = self.update_user_stats(user.id, wins_delta=amount, elo_delta=elo_change)
@@ -119,7 +114,7 @@ class GrindingCog(commands.Cog):
 
     @app_commands.command(name="removewin", description="Remove wins from a user (1 win = -5 Elo)")
     @app_commands.describe(user="The user to remove wins from", amount="Number of wins")
-    @app_commands.checks.has_any_role(GRIND_TEAM_ROLE_NAME)
+    @app_commands.checks.has_permissions(administrator=True)
     async def removewin(self, interaction: discord.Interaction, user: discord.User, amount: int):
         elo_change = -(amount * 5)
         new_stats = self.update_user_stats(user.id, wins_delta=-amount, elo_delta=elo_change)
@@ -129,14 +124,14 @@ class GrindingCog(commands.Cog):
 
     @app_commands.command(name="addelo", description="Add Elo to a user directly")
     @app_commands.describe(user="The user to add Elo to", amount="Amount of Elo")
-    @app_commands.checks.has_any_role(GRIND_TEAM_ROLE_NAME)
+    @app_commands.checks.has_permissions(administrator=True)
     async def addelo(self, interaction: discord.Interaction, user: discord.User, amount: int):
         new_stats = self.update_user_stats(user.id, elo_delta=amount)
         await interaction.response.send_message(f"Added **{amount}** Elo to {user.mention}.\nTotal Wins: {new_stats['wins']} | Total Elo: {new_stats['elo']}")
 
     @app_commands.command(name="removeelo", description="Remove Elo from a user directly")
     @app_commands.describe(user="The user to remove Elo from", amount="Amount of Elo")
-    @app_commands.checks.has_any_role(GRIND_TEAM_ROLE_NAME)
+    @app_commands.checks.has_permissions(administrator=True)
     async def removeelo(self, interaction: discord.Interaction, user: discord.User, amount: int):
         new_stats = self.update_user_stats(user.id, elo_delta=-amount)
         await interaction.response.send_message(f"Removed **{amount}** Elo from {user.mention}.\nTotal Wins: {new_stats['wins']} | Total Elo: {new_stats['elo']}")
