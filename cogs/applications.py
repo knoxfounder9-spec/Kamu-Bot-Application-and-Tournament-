@@ -184,7 +184,7 @@ class GrindTeamModal(ui.Modal, title='Grind Team Application'):
         super().__init__()
 
     level_progression = ui.TextInput(
-        label='Current Level / Progression',
+        label='What is your current level and progression?',
         style=discord.TextStyle.short,
         placeholder='e.g., Lvl 50, just started late game...',
         required=True,
@@ -192,7 +192,7 @@ class GrindTeamModal(ui.Modal, title='Grind Team Application'):
     )
     
     game_knowledge = ui.TextInput(
-        label='Game Knowledge & Excel Areas',
+        label='What areas of the game do you excel in?',
         style=discord.TextStyle.long,
         placeholder='Describe your game sense and what you are good at...',
         required=True,
@@ -200,7 +200,7 @@ class GrindTeamModal(ui.Modal, title='Grind Team Application'):
     )
 
     helping_experience = ui.TextInput(
-        label='Experience Helping Others',
+        label='Have you guided others before? Describe.',
         style=discord.TextStyle.paragraph,
         placeholder='Have you guided others before? Describe...',
         required=True,
@@ -208,7 +208,7 @@ class GrindTeamModal(ui.Modal, title='Grind Team Application'):
     )
 
     availability = ui.TextInput(
-        label='Weekly Availability (Hours)',
+        label='How many hours are you available weekly?',
         style=discord.TextStyle.short,
         placeholder='e.g., 10-15 hours/week',
         required=True,
@@ -216,7 +216,7 @@ class GrindTeamModal(ui.Modal, title='Grind Team Application'):
     )
 
     why_fit = ui.TextInput(
-        label='Why are you a good fit?',
+        label='Why do you think you are a good fit?',
         style=discord.TextStyle.paragraph,
         placeholder='What makes you suitable for the Grind Team?',
         required=True,
@@ -237,34 +237,34 @@ class RecruiterTeamModal(ui.Modal, title='Recruiter Team Application'):
         super().__init__()
 
     motivation = ui.TextInput(
-        label='Why do you want to be a recruiter?',
+        label='Why do you want to join the Recruiter Team?',
         style=discord.TextStyle.paragraph,
         required=True
     )
 
     invites_count = ui.TextInput(
-        label='How many invites do you have?',
+        label='How many invites do you currently have?',
         placeholder='10 invites required',
         style=discord.TextStyle.short,
         required=True
     )
 
     pitch = ui.TextInput(
-        label='How would you pitch Kamu?',
+        label='How would you pitch Kamu to a new player?',
         style=discord.TextStyle.paragraph,
         placeholder='Pitch to someone who never heard of it...',
         required=True
     )
 
     methods = ui.TextInput(
-        label='Recruiting Methods',
+        label='What methods would you use to recruit?',
         style=discord.TextStyle.paragraph,
         placeholder='What methods would you use?',
         required=True
     )
 
     experience_activity = ui.TextInput(
-        label='Experience & Expected Activity',
+        label='Do you have experience? How active are you?',
         style=discord.TextStyle.paragraph,
         placeholder='Previous exp? How active will you be?',
         required=True
@@ -284,35 +284,35 @@ class SupportTeamModal(ui.Modal, title='Support Team Application'):
         super().__init__()
 
     familiarity = ui.TextInput(
-        label='Familiarity with Server',
+        label='How familiar are you with the server?',
         style=discord.TextStyle.paragraph,
         placeholder='Layout, channels, structure...',
         required=True
     )
 
     handling_confusion = ui.TextInput(
-        label='Handling Confused Members',
+        label='How would you handle a confused member?',
         style=discord.TextStyle.paragraph,
         placeholder='How would you handle frustration?',
         required=True
     )
 
     experience = ui.TextInput(
-        label='Assistance Experience',
+        label='Have you assisted in other servers before?',
         style=discord.TextStyle.paragraph,
         placeholder='Have you assisted in other servers?',
         required=True
     )
 
     comm_style = ui.TextInput(
-        label='Communication Style',
+        label='How would you describe your comms style?',
         style=discord.TextStyle.short,
         placeholder='Describe your style...',
         required=True
     )
 
     activity_promo = ui.TextInput(
-        label='Activity & Promotion Ideas',
+        label='How active are you & how to promote Kamu?',
         style=discord.TextStyle.paragraph,
         placeholder='Activity level? Ideas to promote/explain Kamu?',
         required=True
@@ -333,21 +333,21 @@ class TrainersModalPart2(ui.Modal, title='Trainers App (Part 2/2)'):
         self.part1_data = part1_data
 
     organized_engaging = ui.TextInput(
-        label='Keeping Events Organized',
+        label='How would you keep training organized?',
         style=discord.TextStyle.paragraph,
         placeholder='How to keep it engaging?',
         required=True
     )
 
     disruptive_handling = ui.TextInput(
-        label='Handling Disruptive Players',
+        label='How would you handle disruptive players?',
         style=discord.TextStyle.paragraph,
         placeholder='What if it becomes chaotic?',
         required=True
     )
 
     experience = ui.TextInput(
-        label='Previous Experience',
+        label='Do you have previous trainer experience?',
         style=discord.TextStyle.paragraph,
         placeholder='State your experience...',
         required=True
@@ -378,26 +378,26 @@ class TrainersModalPart1(ui.Modal, title='Trainers App (Part 1/2)'):
         super().__init__()
 
     motivation = ui.TextInput(
-        label='Why Trainer / Suitability',
+        label='Why do you want to be a Trainer?',
         style=discord.TextStyle.paragraph,
         required=True
     )
 
     activity = ui.TextInput(
-        label='Activity (1-10) & Hosting Freq',
+        label='Rate activity (1-10) & hosting freq?',
         style=discord.TextStyle.short,
         placeholder='Rate 1-10. How often can you host?',
         required=True
     )
 
     fair_ranking = ui.TextInput(
-        label='Ensuring Fair Ranking',
+        label='How would you ensure fair ranking?',
         style=discord.TextStyle.paragraph,
         required=True
     )
 
     disagreement = ui.TextInput(
-        label='Handling Rank Disagreements',
+        label='How would you handle rank disagreements?',
         style=discord.TextStyle.paragraph,
         required=True
     )
