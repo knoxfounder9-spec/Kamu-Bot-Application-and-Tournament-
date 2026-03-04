@@ -160,8 +160,8 @@ class AICog(commands.Cog):
                 messages.append({"role": role, "content": content})
             messages.append({"role": "user", "content": final_prompt})
 
-            # 1. Try Pollinations with different models
-            pollinations_models = ["openai", "mistral", "llama"]
+            # 1. Try Pollinations with different models (Expanded list)
+            pollinations_models = ["openai", "mistral", "llama", "searchgpt", "qwen", "qwen-72b"]
             for model_name in pollinations_models:
                 try:
                     async with aiohttp.ClientSession() as session:
@@ -172,11 +172,11 @@ class AICog(commands.Cog):
                                 "model": model_name,
                                 "seed": 42
                             },
-                            timeout=8
+                            timeout=10
                         ) as resp:
                             if resp.status == 200:
                                 text = await resp.text()
-                                if text and len(text.strip()) > 0:
+                                if text and len(text.strip()) > 2:
                                     text = text.replace("@everyone", "everyone").replace("@here", "here")
                                     if len(text) > 2000: text = text[:1997] + "..."
                                     add_history(channel_id, "user", prompt)
@@ -188,7 +188,8 @@ class AICog(commands.Cog):
             # 2. Try G4F with a variety of models (Heavy & Lightweight)
             g4f_models = [
                 "gpt-4o", "gpt-4", "claude-3-opus", "claude-3-sonnet", 
-                "gemini-pro", "llama-3-70b", "mixtral-8x7b", "gpt-3.5-turbo"
+                "gemini-pro", "llama-3-70b", "mixtral-8x7b", "gpt-3.5-turbo",
+                "blackbox", "pi", "dalle-3"
             ]
             
             for g_model in g4f_models:

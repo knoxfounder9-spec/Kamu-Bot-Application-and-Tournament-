@@ -61,37 +61,45 @@ class AutoModerationCog(commands.Cog):
                 messages.append({"role": "user", "content": f"Analyze this image URL for NSFW/Gore: {image_url}"})
 
             result = None
-            try:
-                async with aiohttp.ClientSession() as session:
-                    async with session.post(
-                        "https://text.pollinations.ai/",
-                        json={
-                            "messages": messages,
-                            "model": "openai", 
-                            "seed": 42
-                        },
-                        timeout=15
-                    ) as resp:
-                        if resp.status == 200:
-                            result = await resp.text()
-                            result = result.strip()
-                        else:
-                            logger.warning(f"AutoMod Pollinations failed (Status {resp.status}), trying G4F fallback.")
-            except Exception as e:
-                logger.warning(f"AutoMod Pollinations failed: {e}, trying G4F fallback.")
-
-            # G4F Fallback
-            if not result:
+            
+            # 1. Try Pollinations with different models
+            pollinations_models = ["openai", "mistral", "llama"]
+            for model_name in pollinations_models:
                 try:
-                    response = await asyncio.to_thread(
-                        g4f.ChatCompletion.create,
-                        model=None, 
-                        messages=messages
-                    )
-                    result = str(response).strip()
-                except Exception as e:
-                    logger.error(f"AutoMod G4F Fallback failed: {e}")
-                    return False, None, None
+                    async with aiohttp.ClientSession() as session:
+                        async with session.post(
+                            "https://text.pollinations.ai/",
+                            json={
+                                "messages": messages,
+                                "model": model_name,
+                                "seed": 42
+                            },
+                            timeout=10
+                        ) as resp:
+                            if resp.status == 200:
+                                text = await resp.text()
+                                if text and len(text.strip()) > 2:
+                                    result = text.strip()
+                                    break
+                except Exception:
+                    continue
+
+            # 2. G4F Fallback with multiple models
+            if not result:
+                g4f_models = ["gpt-4o-mini", "gpt-3.5-turbo", "llama-3-70b", "mixtral-8x7b"]
+                for g_model in g4f_models:
+                    try:
+                        response = await asyncio.to_thread(
+                            g4f.ChatCompletion.create,
+                            model=g_model, 
+                            messages=messages
+                        )
+                        text = str(response).strip()
+                        if text and len(text) > 3:
+                            result = text
+                            break
+                    except Exception:
+                        continue
             
             if result and "UNSAFE" in result:
                 # Parse result: UNSAFE: Reason: Severity
