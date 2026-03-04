@@ -43,6 +43,19 @@ class GrindingCog(commands.Cog):
 
     @app_commands.command(name="helpgrinding", description="Request help from the Grind Team")
     async def helpgrinding(self, interaction: discord.Interaction):
+        # Check if user already has an open ticket
+        guild = interaction.guild
+        user = interaction.user
+        category = discord.utils.get(guild.categories, name="Grind Tickets")
+        
+        if category:
+            for channel in category.text_channels:
+                # Check if channel name starts with user's name (simple check)
+                # A more robust way would be to store ticket owners in a DB, but name check works for now
+                if channel.name.startswith(f"{user.name.lower()}-"):
+                    await interaction.response.send_message(f"You already have an open ticket: {channel.mention}. Please close it before opening a new one.", ephemeral=True)
+                    return
+
         # Create a view with a select menu
         class GrindTypeView(discord.ui.View):
             def __init__(self, bot_ref):
@@ -96,11 +109,60 @@ class GrindingCog(commands.Cog):
                     
                     # Ping the role inside the channel
                     role_mention = grind_role.mention if grind_role else "@Grind Team"
-                    await channel.send(f"{role_mention}\nYou have been summoned by {user.mention} for help with **{grind_type}**.")
+                    
+                    # Create Close Button View
+                    class CloseTicketView(discord.ui.View):
+                        def __init__(self):
+                            super().__init__(timeout=None) # Persistent view
+
+                        @discord.ui.button(label="Close Ticket", style=discord.ButtonStyle.danger, emoji="🔒")
+                        async def close_ticket(self, interaction: discord.Interaction, button: discord.ui.Button):
+                            # Check permissions: Admin or Grind Team Role
+                            user = interaction.user
+                            is_admin = user.guild_permissions.administrator
+                            has_role = False
+                            if grind_role:
+                                has_role = grind_role in user.roles
+                            
+                            if not (is_admin or has_role):
+                                await interaction.response.send_message("Only Admins or the Grind Team can close this ticket.", ephemeral=True)
+                                return
+                            
+                            await interaction.response.send_message("Closing ticket in 5 seconds...")
+                            await asyncio.sleep(5)
+                            await interaction.channel.delete()
+
+                    await channel.send(f"{role_mention}\nYou have been summoned by {user.mention} for help with **{grind_type}**.", view=CloseTicketView())
+                    
                 except Exception as e:
                     await interaction.response.send_message(f"Failed to create channel: {e}", ephemeral=True)
 
         await interaction.response.send_message("Please select the type of grinding help you need:", view=GrindTypeView(self.bot), ephemeral=True)
+
+    @app_commands.command(name="helpingclose", description="Close the current ticket channel")
+    async def helpingclose(self, interaction: discord.Interaction):
+        # Check if we are in a ticket channel (under Grind Tickets category)
+        if not interaction.channel.category or interaction.channel.category.name != "Grind Tickets":
+             await interaction.response.send_message("This command can only be used in a Grind Ticket channel.", ephemeral=True)
+             return
+
+        # Check permissions: Admin or Grind Team Role
+        user = interaction.user
+        is_admin = user.guild_permissions.administrator
+        
+        guild = interaction.guild
+        grind_role = guild.get_role(GRIND_TEAM_ROLE_ID)
+        has_role = False
+        if grind_role:
+            has_role = grind_role in user.roles
+        
+        if not (is_admin or has_role):
+            await interaction.response.send_message("Only Admins or the Grind Team can close this ticket.", ephemeral=True)
+            return
+
+        await interaction.response.send_message("Closing ticket in 5 seconds...")
+        await asyncio.sleep(5)
+        await interaction.channel.delete()
 
     # --- Win Management ---
 
