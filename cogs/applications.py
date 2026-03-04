@@ -99,24 +99,51 @@ def generate_panel_embeds(guild_id):
 # --- Admin Views ---
 
 class ApplicationReviewView(ui.View):
-    def __init__(self, applicant_id: int, app_type: str):
+    def __init__(self, applicant_id: int = None, app_type: str = None):
         super().__init__(timeout=None) # Persistent view for logs
         self.applicant_id = applicant_id
         self.app_type = app_type
 
+    async def get_data(self, interaction: discord.Interaction):
+        """Extracts applicant ID and app type from the embed if not already set."""
+        if self.applicant_id and self.app_type:
+            return self.applicant_id, self.app_type
+        
+        try:
+            embed = interaction.message.embeds[0]
+            # Extract app_type from title "New Grind Team Application"
+            app_type = embed.title.replace("New ", "").replace(" Application", "")
+            # Extract applicant_id from footer "User ID: 123456789"
+            applicant_id = int(embed.footer.text.replace("User ID: ", ""))
+            return applicant_id, app_type
+        except Exception as e:
+            logger.error(f"Failed to parse application data from embed: {e}")
+            return None, None
+
     @ui.button(label="Accept", style=discord.ButtonStyle.success, custom_id="app_accept")
     async def accept_button(self, interaction: discord.Interaction, button: ui.Button):
-        await interaction.response.defer()
+        await interaction.response.defer(ephemeral=True)
         
-        guild = interaction.guild
-        member = guild.get_member(self.applicant_id)
-        
-        if not member:
-            await interaction.followup.send("Member not found in the server.", ephemeral=True)
+        applicant_id, app_type = await self.get_data(interaction)
+        if not applicant_id or not app_type:
+            await interaction.followup.send("Could not retrieve application data. This message might be too old or corrupted.", ephemeral=True)
             return
 
-        role_id = get_role_id(guild.id, self.app_type)
+        guild = interaction.guild
+        member = guild.get_member(applicant_id)
+        if not member:
+            try:
+                member = await guild.fetch_member(applicant_id)
+            except:
+                pass
+        
+        if not member:
+            await interaction.followup.send("Member not found in the server. They might have left.", ephemeral=True)
+            return
+
+        role_id = get_role_id(guild.id, app_type)
         role_added = False
+        role_mention = "None"
         
         if role_id:
             try:
@@ -125,6 +152,7 @@ class ApplicationReviewView(ui.View):
                     try:
                         await member.add_roles(role)
                         role_added = True
+                        role_mention = role.mention
                     except discord.Forbidden:
                         await interaction.followup.send("I don't have permission to add that role. Please check my role hierarchy.", ephemeral=True)
                     except Exception as e:
@@ -134,14 +162,14 @@ class ApplicationReviewView(ui.View):
             except ValueError:
                  await interaction.followup.send("Invalid Role ID format stored.", ephemeral=True)
         else:
-             await interaction.followup.send(f"No role configured for {self.app_type}. Use /setrole to configure it.", ephemeral=True)
+             await interaction.followup.send(f"No role configured for {app_type}. Use /setrole to configure it.", ephemeral=True)
         
         # Update Embed
         embed = interaction.message.embeds[0]
         embed.color = discord.Color.green()
         embed.add_field(name="Status", value=f"Accepted by {interaction.user.mention}", inline=False)
         if role_added:
-             embed.add_field(name="Role Action", value=f"Role {role.mention} added.", inline=False)
+             embed.add_field(name="Role Action", value=f"Role {role_mention} added.", inline=False)
         
         # Disable buttons
         for item in self.children:
@@ -151,7 +179,7 @@ class ApplicationReviewView(ui.View):
         
         # Notify User
         try:
-            await member.send(f"Congratulations! Your application for **{self.app_type}** in **{guild.name}** has been ACCEPTED!")
+            await member.send(f"Congratulations! Your application for **{app_type}** in **{guild.name}** has been ACCEPTED!")
         except:
             pass
             
@@ -159,10 +187,20 @@ class ApplicationReviewView(ui.View):
 
     @ui.button(label="Reject", style=discord.ButtonStyle.danger, custom_id="app_reject")
     async def reject_button(self, interaction: discord.Interaction, button: ui.Button):
-        await interaction.response.defer()
+        await interaction.response.defer(ephemeral=True)
         
+        applicant_id, app_type = await self.get_data(interaction)
+        if not applicant_id or not app_type:
+            await interaction.followup.send("Could not retrieve application data.", ephemeral=True)
+            return
+
         guild = interaction.guild
-        member = guild.get_member(self.applicant_id)
+        member = guild.get_member(applicant_id)
+        if not member:
+            try:
+                member = await guild.fetch_member(applicant_id)
+            except:
+                pass
         
         # Update Embed
         embed = interaction.message.embeds[0]
@@ -178,7 +216,7 @@ class ApplicationReviewView(ui.View):
         # Notify User
         if member:
             try:
-                await member.send(f"Your application for **{self.app_type}** in **{guild.name}** has been REJECTED.")
+                await member.send(f"Your application for **{app_type}** in **{guild.name}** has been REJECTED.")
             except:
                 pass
         
@@ -441,6 +479,8 @@ async def send_application_log(interaction: discord.Interaction, app_type: str, 
     if LOG_CHANNEL_ID:
         try:
             log_channel = interaction.guild.get_channel(int(LOG_CHANNEL_ID))
+            if not log_channel:
+                log_channel = await interaction.guild.fetch_channel(int(LOG_CHANNEL_ID))
         except:
             pass
     
@@ -509,6 +549,7 @@ class Applications(commands.Cog):
 
     async def cog_load(self):
         self.bot.add_view(ApplicationView())
+        self.bot.add_view(ApplicationReviewView())
 
     @app_commands.command(name="panel", description="Creates the application panel")
     @app_commands.checks.has_permissions(administrator=True)
