@@ -50,7 +50,7 @@ def save_panel_config(config_data):
     with open(PANEL_CONFIG_FILE, 'w') as f:
         json.dump(config_data, f, indent=4)
 
-def generate_panel_embed(guild_id):
+def generate_panel_embeds(guild_id):
     status_grind = get_app_status(guild_id, "Grind Team")
     status_recruiter = get_app_status(guild_id, "Recruiter Team")
     status_trainers = get_app_status(guild_id, "Trainers")
@@ -58,30 +58,43 @@ def generate_panel_embed(guild_id):
 
     def get_emoji(status):
         return "🟩" if status == "Open" else "🟥"
-
-    description = (
-        "Welcome to the official recruitment portal for **Kamu Guild**.\n\n"
-        "We are seeking dedicated and skilled individuals to join our ranks. "
-        "Please review the available positions below and select the role that best aligns with your expertise and interests.\n\n"
-        "**Available Positions:**\n"
-        f"• **Grind Team:** {get_emoji(status_grind)} ({status_grind})\n"
-        "  *For top-tier players focused on progression and efficiency.*\n"
-        f"• **Recruiter Team:** {get_emoji(status_recruiter)} ({status_recruiter})\n"
-        "  *For charismatic members to help grow our community.*\n"
-        f"• **Trainers:** {get_emoji(status_trainers)} ({status_trainers})\n"
-        "  *For experienced players willing to mentor and guide others.*\n"
-        f"• **Support Team:** {get_emoji(status_support)} ({status_support})\n"
-        "  *For helpful members to assist with server operations and inquiries.*\n\n"
-        "Select an option from the dropdown menu to begin your application process."
-    )
     
-    embed = discord.Embed(
+    # Custom color #740000
+    color = discord.Color.from_str("#740000")
+
+    # Embed 1: General Info
+    embed1 = discord.Embed(
         title="Kamu Guild Recruitment",
-        description=description,
-        color=discord.Color.gold()
+        description=(
+            "### Welcome to the official recruitment portal for Kamu Guild.\n\n"
+            "Staff applications are a formal process that allows members of Kamu to apply for leadership and moderation roles within the guild. "
+            "These applications help ensure that only responsible, dedicated, and capable members are selected to represent and support the community.\n\n"
+            "Take your time with your application to ensure it's made to the best of your capabilities, ensure it shows initiative, commitment, and a willingness to take on more responsibility.\n\n"
+            "**Standard Requirements:**\n\n"
+            "- Must be 14+\n"
+            "- Active In the Discord\n"
+            "- Able to work in a team"
+        ),
+        color=color
     )
-    embed.set_footer(text="Kamu Guild • Kaizen")
-    return embed
+
+    # Embed 2: Status
+    embed2 = discord.Embed(
+        description=(
+            "We are seeking dedicated and skilled individuals to join our ranks. "
+            "Please review the available positions below and select the role that best aligns with your expertise and interests.\n\n"
+            "### Available Positions:\n"
+            f"• **Grind Team:** {get_emoji(status_grind)}\n"
+            f"• **Recruiter Team:** {get_emoji(status_recruiter)}\n"
+            f"• **Trainers:** {get_emoji(status_trainers)}\n"
+            f"• **Support Team:** {get_emoji(status_support)}\n\n"
+            "Select an option from the dropdown menu to begin your application process."
+        ),
+        color=color
+    )
+    embed2.set_footer(text="Kamu Guild • Kaizen")
+    
+    return [embed1, embed2]
 
 # --- Admin Views ---
 
@@ -493,10 +506,10 @@ class Applications(commands.Cog):
     @app_commands.command(name="panel", description="Creates the application panel")
     @app_commands.checks.has_permissions(administrator=True)
     async def panel(self, interaction: discord.Interaction):
-        embed = generate_panel_embed(interaction.guild_id)
-        embed.set_thumbnail(url=interaction.guild.icon.url if interaction.guild.icon else None)
+        embeds = generate_panel_embeds(interaction.guild_id)
+        embeds[0].set_thumbnail(url=interaction.guild.icon.url if interaction.guild.icon else None)
         
-        await interaction.response.send_message(embed=embed, view=ApplicationView())
+        await interaction.response.send_message(embeds=embeds, view=ApplicationView())
         
         # Save message info for auto-updates
         message = await interaction.original_response()
@@ -543,9 +556,9 @@ class Applications(commands.Cog):
                 if channel:
                     message = await channel.fetch_message(panel_info["message_id"])
                     if message:
-                        new_embed = generate_panel_embed(interaction.guild_id)
-                        new_embed.set_thumbnail(url=interaction.guild.icon.url if interaction.guild.icon else None)
-                        await message.edit(embed=new_embed, view=ApplicationView())
+                        new_embeds = generate_panel_embeds(interaction.guild_id)
+                        new_embeds[0].set_thumbnail(url=interaction.guild.icon.url if interaction.guild.icon else None)
+                        await message.edit(embeds=new_embeds, view=ApplicationView())
                         updated = True
             except Exception as e:
                 print(f"Failed to auto-update panel: {e}")
