@@ -7,8 +7,10 @@ import json
 # --- Constants ---
 LOG_CHANNEL_ID = os.getenv('LOG_CHANNEL_ID')
 ROLES_FILE = 'roles.json'
+APP_STATUS_FILE = 'app_status.json'
+PANEL_CONFIG_FILE = 'panel_config.json'
 
-# --- Helper Functions for Roles ---
+# --- Helper Functions for Roles & Status ---
 def load_roles():
     if not os.path.exists(ROLES_FILE):
         return {}
@@ -22,6 +24,64 @@ def save_roles(roles_data):
 def get_role_id(guild_id, app_type):
     roles_data = load_roles()
     return roles_data.get(str(guild_id), {}).get(app_type)
+
+def load_app_status():
+    if not os.path.exists(APP_STATUS_FILE):
+        return {}
+    with open(APP_STATUS_FILE, 'r') as f:
+        return json.load(f)
+
+def save_app_status(status_data):
+    with open(APP_STATUS_FILE, 'w') as f:
+        json.dump(status_data, f, indent=4)
+
+def get_app_status(guild_id, app_type):
+    status_data = load_app_status()
+    # Default to "Open" if not set
+    return status_data.get(str(guild_id), {}).get(app_type, "Open")
+
+def load_panel_config():
+    if not os.path.exists(PANEL_CONFIG_FILE):
+        return {}
+    with open(PANEL_CONFIG_FILE, 'r') as f:
+        return json.load(f)
+
+def save_panel_config(config_data):
+    with open(PANEL_CONFIG_FILE, 'w') as f:
+        json.dump(config_data, f, indent=4)
+
+def generate_panel_embed(guild_id):
+    status_grind = get_app_status(guild_id, "Grind Team")
+    status_recruiter = get_app_status(guild_id, "Recruiter Team")
+    status_trainers = get_app_status(guild_id, "Trainers")
+    status_support = get_app_status(guild_id, "Support Team")
+
+    def get_emoji(status):
+        return "🟩" if status == "Open" else "🟥"
+
+    description = (
+        "Welcome to the official recruitment portal for **Kamu Guild**.\n\n"
+        "We are seeking dedicated and skilled individuals to join our ranks. "
+        "Please review the available positions below and select the role that best aligns with your expertise and interests.\n\n"
+        "**Available Positions:**\n"
+        f"• **Grind Team:** {get_emoji(status_grind)} ({status_grind})\n"
+        "  *For top-tier players focused on progression and efficiency.*\n"
+        f"• **Recruiter Team:** {get_emoji(status_recruiter)} ({status_recruiter})\n"
+        "  *For charismatic members to help grow our community.*\n"
+        f"• **Trainers:** {get_emoji(status_trainers)} ({status_trainers})\n"
+        "  *For experienced players willing to mentor and guide others.*\n"
+        f"• **Support Team:** {get_emoji(status_support)} ({status_support})\n"
+        "  *For helpful members to assist with server operations and inquiries.*\n\n"
+        "Select an option from the dropdown menu to begin your application process."
+    )
+    
+    embed = discord.Embed(
+        title="Kamu Guild Recruitment",
+        description=description,
+        color=discord.Color.gold()
+    )
+    embed.set_footer(text="Kamu Guild • Kaizen")
+    return embed
 
 # --- Admin Views ---
 
@@ -390,6 +450,22 @@ class ApplicationSelect(ui.Select):
 
     async def callback(self, interaction: discord.Interaction):
         choice = self.values[0]
+        guild_id = interaction.guild_id
+        
+        # Check status
+        app_type_map = {
+            "Grind Team App": "Grind Team",
+            "Recruiter App": "Recruiter Team",
+            "Trainers App": "Trainers",
+            "Support Team App": "Support Team"
+        }
+        
+        app_type = app_type_map.get(choice)
+        if app_type:
+            status = get_app_status(guild_id, app_type)
+            if status == "Closed":
+                await interaction.response.send_message(f"Sorry, applications for **{app_type}** are currently **CLOSED**.", ephemeral=True)
+                return
         
         if choice == "Grind Team App":
             await interaction.response.send_modal(GrindTeamModal())
@@ -417,15 +493,70 @@ class Applications(commands.Cog):
     @app_commands.command(name="panel", description="Creates the application panel")
     @app_commands.checks.has_permissions(administrator=True)
     async def panel(self, interaction: discord.Interaction):
-        embed = discord.Embed(
-            title="Kamu Guild Applications",
-            description="Please select the team you wish to apply for from the dropdown below.",
-            color=discord.Color.gold()
-        )
-        embed.set_footer(text="Kamu Guild • Kaizen")
+        embed = generate_panel_embed(interaction.guild_id)
         embed.set_thumbnail(url=interaction.guild.icon.url if interaction.guild.icon else None)
         
         await interaction.response.send_message(embed=embed, view=ApplicationView())
+        
+        # Save message info for auto-updates
+        message = await interaction.original_response()
+        config = load_panel_config()
+        config[str(interaction.guild_id)] = {
+            "channel_id": interaction.channel_id,
+            "message_id": message.id
+        }
+        save_panel_config(config)
+
+    @app_commands.command(name="setapp", description="Set the status of an application (Open/Closed)")
+    @app_commands.checks.has_permissions(administrator=True)
+    @app_commands.describe(
+        app_type="The type of application",
+        status="The status (Open or Closed)"
+    )
+    @app_commands.choices(app_type=[
+        app_commands.Choice(name="Grind Team", value="Grind Team"),
+        app_commands.Choice(name="Recruiter Team", value="Recruiter Team"),
+        app_commands.Choice(name="Trainers", value="Trainers"),
+        app_commands.Choice(name="Support Team", value="Support Team")
+    ], status=[
+        app_commands.Choice(name="Open", value="Open"),
+        app_commands.Choice(name="Closed", value="Closed")
+    ])
+    async def setapp(self, interaction: discord.Interaction, app_type: app_commands.Choice[str], status: app_commands.Choice[str]):
+        status_data = load_app_status()
+        guild_id = str(interaction.guild_id)
+        
+        if guild_id not in status_data:
+            status_data[guild_id] = {}
+        
+        status_data[guild_id][app_type.value] = status.value
+        save_app_status(status_data)
+        
+        # Auto-update panel if possible
+        updated = False
+        config = load_panel_config()
+        panel_info = config.get(guild_id)
+        
+        if panel_info:
+            try:
+                channel = interaction.guild.get_channel(panel_info["channel_id"])
+                if channel:
+                    message = await channel.fetch_message(panel_info["message_id"])
+                    if message:
+                        new_embed = generate_panel_embed(interaction.guild_id)
+                        new_embed.set_thumbnail(url=interaction.guild.icon.url if interaction.guild.icon else None)
+                        await message.edit(embed=new_embed, view=ApplicationView())
+                        updated = True
+            except Exception as e:
+                print(f"Failed to auto-update panel: {e}")
+
+        msg = f"Application status for **{app_type.value}** set to **{status.value}**."
+        if updated:
+            msg += " The panel has been updated."
+        else:
+            msg += " (Could not auto-update panel. Please run /panel again if needed.)"
+            
+        await interaction.response.send_message(msg, ephemeral=True)
 
     @app_commands.command(name="setrole", description="Set the role to be given when an application is accepted")
     @app_commands.checks.has_permissions(administrator=True)
