@@ -248,21 +248,6 @@ class AICog(commands.Cog):
         update_channel_config(interaction.channel_id, "enabled", False)
         await interaction.response.send_message("AI disabled in this channel.", ephemeral=True)
 
-    @app_commands.command(name="aivoicechat", description="Toggle AI voice chat mode")
-    @app_commands.checks.has_permissions(administrator=True)
-    @app_commands.choices(mode=[
-        app_commands.Choice(name="On", value="on"),
-        app_commands.Choice(name="Off", value="off")
-    ])
-    async def aivoicechat(self, interaction: discord.Interaction, mode: app_commands.Choice[str]):
-        is_on = mode.value == "on"
-        update_channel_config(interaction.channel_id, "voice_mode", is_on)
-        
-        if is_on:
-            await interaction.response.send_message("AI Voice Chat mode enabled. (Note: Actual voice synthesis requires additional setup, currently text-only response simulating voice).", ephemeral=True)
-        else:
-            await interaction.response.send_message("AI Voice Chat mode disabled.", ephemeral=True)
-
     @app_commands.command(name="ai_behaviour", description="Set the AI's personality")
     @app_commands.checks.has_permissions(administrator=True)
     @app_commands.describe(type="The personality type (e.g., kind, smart, toxic, chill)")
