@@ -141,10 +141,10 @@ class AICog(commands.Cog):
                 # Let's return error to avoid confusion if key is present but invalid.
                 return f"Gemini Error: {e}"
 
-        # --- Pollinations.ai (Free, Keyless, Smooth) ---
+        # --- Free AI Backend (Pollinations with G4F Fallback) ---
         else:
+            # Try Pollinations first
             try:
-                # Construct messages
                 messages = [{"role": "system", "content": f"You are a {persona}. You are talking to {user_name}."}]
                 for h in history_data:
                     role = "user" if h["role"] == "user" else "assistant"
@@ -153,36 +153,57 @@ class AICog(commands.Cog):
                 
                 messages.append({"role": "user", "content": final_prompt})
 
-                # Call Pollinations API
                 async with aiohttp.ClientSession() as session:
                     async with session.post(
                         "https://text.pollinations.ai/",
                         json={
                             "messages": messages,
-                            "model": "openai", # Uses GPT-4o-mini usually
-                            "seed": 42 # Optional stability
+                            "model": "openai",
+                            "seed": 42
                         },
-                        timeout=30
+                        timeout=15
                     ) as resp:
                         if resp.status == 200:
                             text = await resp.text()
+                            if text:
+                                if len(text) > 2000:
+                                    text = text[:1997] + "..."
+                                add_history(channel_id, "user", prompt)
+                                add_history(channel_id, "model", text)
+                                return text
                         else:
-                            raise Exception(f"Pollinations API status: {resp.status}")
-
-                if not text:
-                    text = "I'm having trouble thinking right now."
-
-                # Truncate
-                if len(text) > 2000:
-                    text = text[:1997] + "..."
-
-                add_history(channel_id, "user", prompt)
-                add_history(channel_id, "model", text)
-                return text
-
+                            logger.warning(f"Pollinations API returned status {resp.status}, falling back to G4F.")
             except Exception as e:
-                logger.error(f"Pollinations AI failed: {e}")
-                return "I'm having trouble connecting to my brain (Pollinations AI Error)."
+                logger.warning(f"Pollinations AI failed: {e}, falling back to G4F.")
+
+            # Fallback to G4F
+            try:
+                # Construct messages for g4f
+                messages = [{"role": "system", "content": f"You are a {persona}. You are talking to {user_name}."}]
+                for h in history_data:
+                    role = "user" if h["role"] == "user" else "assistant"
+                    content = " ".join(h["parts"])
+                    messages.append({"role": role, "content": content})
+                messages.append({"role": "user", "content": final_prompt})
+
+                response = await asyncio.to_thread(
+                    g4f.ChatCompletion.create,
+                    model=None, 
+                    messages=messages
+                )
+                text = str(response)
+                
+                if text and len(text.strip()) > 0:
+                    if len(text) > 2000:
+                        text = text[:1997] + "..."
+                    add_history(channel_id, "user", prompt)
+                    add_history(channel_id, "model", text)
+                    return text
+                else:
+                    raise Exception("G4F returned empty response")
+            except Exception as e:
+                logger.error(f"G4F Fallback failed: {e}")
+                return "I'm having trouble connecting to my brain (All AI providers failed)."
 
     # --- Commands ---
 

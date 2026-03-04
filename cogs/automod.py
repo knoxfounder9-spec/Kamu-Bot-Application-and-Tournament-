@@ -48,36 +48,50 @@ class AutoModerationCog(commands.Cog):
                     if re.search(r'\b' + re.escape(word) + r'\b', text_content, re.IGNORECASE):
                         return True, "Detected banned word", "medium"
 
-            # 2. AI Check using Pollinations.ai
+            # 2. AI Check using Pollinations.ai with G4F Fallback
             messages = []
-            
             sys_instruct = "You are a content moderation AI. Detect NSFW (pornography, nudity), severe gore, and high-level profanity/hate speech. Return ONLY 'UNSAFE: [Reason]: [Severity]' if violated. Severity: 'HIGH' (NSFW/Gore), 'MEDIUM' (Profanity). Return 'SAFE' if ok."
-            
             messages.append({"role": "system", "content": sys_instruct})
 
             if text_content:
                 messages.append({"role": "user", "content": f"Analyze text: {text_content}"})
-            
             if image_url:
                 messages.append({"role": "user", "content": f"Analyze this image URL for NSFW/Gore: {image_url}"})
 
-            async with aiohttp.ClientSession() as session:
-                async with session.post(
-                    "https://text.pollinations.ai/",
-                    json={
-                        "messages": messages,
-                        "model": "openai", 
-                        "seed": 42
-                    },
-                    timeout=15
-                ) as resp:
-                    if resp.status == 200:
-                        result = await resp.text()
-                        result = result.strip()
-                    else:
-                        return False, None, None
+            result = None
+            try:
+                async with aiohttp.ClientSession() as session:
+                    async with session.post(
+                        "https://text.pollinations.ai/",
+                        json={
+                            "messages": messages,
+                            "model": "openai", 
+                            "seed": 42
+                        },
+                        timeout=15
+                    ) as resp:
+                        if resp.status == 200:
+                            result = await resp.text()
+                            result = result.strip()
+                        else:
+                            logger.warning(f"AutoMod Pollinations failed (Status {resp.status}), trying G4F fallback.")
+            except Exception as e:
+                logger.warning(f"AutoMod Pollinations failed: {e}, trying G4F fallback.")
+
+            # G4F Fallback
+            if not result:
+                try:
+                    response = await asyncio.to_thread(
+                        g4f.ChatCompletion.create,
+                        model=None, 
+                        messages=messages
+                    )
+                    result = str(response).strip()
+                except Exception as e:
+                    logger.error(f"AutoMod G4F Fallback failed: {e}")
+                    return False, None, None
             
-            if "UNSAFE" in result:
+            if result and "UNSAFE" in result:
                 # Parse result: UNSAFE: Reason: Severity
                 parts = result.split(":")
                 reason = parts[1].strip() if len(parts) > 1 else "Violation"
