@@ -4,8 +4,11 @@ from discord.ext import commands
 import json
 import os
 import math
+import datetime
+import time
 
 GRIND_STATS_FILE = 'grind_stats.json'
+GRIND_BLACKLIST_FILE = 'grind_blacklist.json'
 GRIND_TEAM_ROLE_ID = 1477359005339877446
 
 def load_grind_stats():
@@ -17,6 +20,16 @@ def load_grind_stats():
 def save_grind_stats(stats):
     with open(GRIND_STATS_FILE, 'w') as f:
         json.dump(stats, f, indent=4)
+
+def load_blacklist():
+    if not os.path.exists(GRIND_BLACKLIST_FILE):
+        return {}
+    with open(GRIND_BLACKLIST_FILE, 'r') as f:
+        return json.load(f)
+
+def save_blacklist(blacklist):
+    with open(GRIND_BLACKLIST_FILE, 'w') as f:
+        json.dump(blacklist, f, indent=4)
 
 class GrindingCog(commands.Cog):
     def __init__(self, bot):
@@ -43,9 +56,25 @@ class GrindingCog(commands.Cog):
 
     @app_commands.command(name="helpgrinding", description="Request help from the Grind Team")
     async def helpgrinding(self, interaction: discord.Interaction):
+        user = interaction.user
+        
+        # Check Blacklist
+        blacklist = load_blacklist()
+        if str(user.id) in blacklist:
+            expiry_timestamp = blacklist[str(user.id)]
+            if time.time() < expiry_timestamp:
+                # Still blacklisted
+                expiry_dt = datetime.datetime.fromtimestamp(expiry_timestamp)
+                relative_time = discord.utils.format_dt(expiry_dt, style="R")
+                await interaction.response.send_message(f"You are blacklisted from creating grind tickets until {relative_time}.", ephemeral=True)
+                return
+            else:
+                # Expired, remove from blacklist
+                del blacklist[str(user.id)]
+                save_blacklist(blacklist)
+
         # Check if user already has an open ticket
         guild = interaction.guild
-        user = interaction.user
         category = discord.utils.get(guild.categories, name="Grind Tickets")
         
         if category:
@@ -138,6 +167,23 @@ class GrindingCog(commands.Cog):
                     await interaction.response.send_message(f"Failed to create channel: {e}", ephemeral=True)
 
         await interaction.response.send_message("Please select the type of grinding help you need:", view=GrindTypeView(self.bot), ephemeral=True)
+
+    @app_commands.command(name="helpblacklist", description="Blacklist a user from creating grind tickets")
+    @app_commands.describe(user="The user to blacklist", hours="Duration in hours")
+    @app_commands.checks.has_permissions(administrator=True)
+    async def helpblacklist(self, interaction: discord.Interaction, user: discord.User, hours: int):
+        blacklist = load_blacklist()
+        
+        # Calculate expiry timestamp
+        expiry_time = time.time() + (hours * 3600)
+        blacklist[str(user.id)] = expiry_time
+        
+        save_blacklist(blacklist)
+        
+        expiry_dt = datetime.datetime.fromtimestamp(expiry_time)
+        relative_time = discord.utils.format_dt(expiry_dt, style="R")
+        
+        await interaction.response.send_message(f"🚫 {user.mention} has been blacklisted from creating grind tickets for **{hours} hours** (until {relative_time}).")
 
     @app_commands.command(name="helpingclose", description="Close the current ticket channel")
     async def helpingclose(self, interaction: discord.Interaction):
