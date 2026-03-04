@@ -115,7 +115,10 @@ class AICog(commands.Cog):
         sys_instruct = (
             f"You are an advanced AI with the persona: {persona}. You are talking to {user_name}. "
             "Be highly intelligent, helpful, and engaging. "
-            "CRITICAL: Never use '@everyone' or '@here' in your responses. "
+            "CRITICAL RULES: "
+            "1. NEVER use '@everyone' or '@here' in your responses. "
+            "2. NEVER use slurs, swear words, or any form of racism. "
+            "3. NEVER perform translations. If asked to translate, politely decline. "
             "If you need to mention a user, use their name without the @ symbol if possible."
         )
 
@@ -264,7 +267,7 @@ class AICog(commands.Cog):
     @app_commands.choices(persona=[
         app_commands.Choice(name="Default (Helpful Assistant)", value="helpful assistant"),
         app_commands.Choice(name="Kind & Caring", value="kind and caring"),
-        app_commands.Choice(name="Toxic & Rude", value="toxic and rude"),
+        app_commands.Choice(name="Funny & Witty", value="funny and witty"),
         app_commands.Choice(name="Smart & Concise", value="smart and concise"),
         app_commands.Choice(name="Chill & Casual", value="chill and casual"),
         app_commands.Choice(name="Pirate", value="pirate"),
