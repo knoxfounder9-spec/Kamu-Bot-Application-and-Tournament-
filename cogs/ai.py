@@ -7,6 +7,7 @@ import os
 import json
 import logging
 import asyncio
+import aiohttp
 import g4f
 from duckduckgo_search import DDGS
 
@@ -228,7 +229,9 @@ class AICog(commands.Cog):
 
         async with ctx.typing():
             response = await self.generate_response(ctx.channel.id, prompt, ctx.author.display_name)
-            await ctx.reply(response)
+            # Use allowed_mentions to strictly prevent @everyone and @here pings
+            allowed = discord.AllowedMentions(everyone=False, roles=False, users=True)
+            await ctx.reply(response, allowed_mentions=allowed)
 
     @app_commands.command(name="aion", description="Enable AI in this channel")
     @app_commands.checks.has_permissions(administrator=True)
@@ -297,7 +300,9 @@ class AICog(commands.Cog):
             prompt = message.content
             async with message.channel.typing():
                 response = await self.generate_response(message.channel.id, prompt, message.author.display_name)
-                await message.reply(response)
+                # Use allowed_mentions to strictly prevent @everyone and @here pings
+                allowed = discord.AllowedMentions(everyone=False, roles=False, users=True)
+                await message.reply(response, allowed_mentions=allowed)
 
 async def setup(bot):
     await bot.add_cog(AICog(bot))
