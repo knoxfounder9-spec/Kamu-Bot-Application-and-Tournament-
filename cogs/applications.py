@@ -119,15 +119,22 @@ class ApplicationReviewView(ui.View):
         role_added = False
         
         if role_id:
-            role = guild.get_role(role_id)
-            if role:
-                try:
-                    await member.add_roles(role)
-                    role_added = True
-                except discord.Forbidden:
-                    await interaction.followup.send("I don't have permission to add that role.", ephemeral=True)
-            else:
-                await interaction.followup.send("Configured role not found.", ephemeral=True)
+            try:
+                role = guild.get_role(int(role_id))
+                if role:
+                    try:
+                        await member.add_roles(role)
+                        role_added = True
+                    except discord.Forbidden:
+                        await interaction.followup.send("I don't have permission to add that role. Please check my role hierarchy.", ephemeral=True)
+                    except Exception as e:
+                         await interaction.followup.send(f"Failed to add role: {e}", ephemeral=True)
+                else:
+                    await interaction.followup.send(f"Configured role (ID: {role_id}) not found in this server.", ephemeral=True)
+            except ValueError:
+                 await interaction.followup.send("Invalid Role ID format stored.", ephemeral=True)
+        else:
+             await interaction.followup.send(f"No role configured for {self.app_type}. Use /setrole to configure it.", ephemeral=True)
         
         # Update Embed
         embed = interaction.message.embeds[0]
