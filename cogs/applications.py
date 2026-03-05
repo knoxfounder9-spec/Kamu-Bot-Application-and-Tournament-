@@ -640,11 +640,7 @@ def generate_tournament_panel_embeds(guild_id):
             "> Tournament applications are a formal process that allows members of Kamu to apply for the upcoming tournament. "
             "These applications help ensure that only responsible, dedicated, and capable members are selected to represent and support the community.\n\n"
             "> Take your time with your application to ensure it's made to the best of your capabilities, ensure it shows initiative, commitment, and a willingness to take on more responsibility.\n\n"
-            "**Status:** " + ("🟩 Open" if status_tournament == "Open" else "🟥 Closed") + "\n\n"
-            "**Standard Requirements:**\n\n"
-            "> - Must be 14+\n"
-            "> - Active In the Discord\n"
-            "> - Able to work in a team"
+            "**Status:** " + ("🟩 Open" if status_tournament == "Open" else "🟥 Closed")
         ),
         color=color
     )
