@@ -695,6 +695,10 @@ class Applications(commands.Cog):
         self.bot.add_view(ApplicationReviewView())
         self.bot.add_view(TournamentView())
 
+    @commands.Cog.listener()
+    async def on_ready(self):
+        self.bot.add_view(TournamentView())
+
     @app_commands.command(name="panel", description="Creates the application panel")
     @app_commands.checks.has_permissions(administrator=True)
     async def panel(self, interaction: discord.Interaction):
