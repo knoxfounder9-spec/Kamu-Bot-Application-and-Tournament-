@@ -99,6 +99,21 @@ def generate_panel_embeds(guild_id):
     
     return [embed1, embed2]
 
+def generate_tournament_embed(guild_id):
+    color = discord.Color.from_str("#FFFACD")
+    embed = discord.Embed(
+        title="Tournament Recruitment",
+        description=(
+            "### Welcome to the official tournament recruitment portal.\n\n"
+            "> Tournament applications are a formal process that allows members of Kamu to apply for the upcoming tournament. "
+            "These applications help ensure that only responsible, dedicated, and capable members are selected to represent and support the community.\n\n"
+            "> Take your time with your application to ensure it's made to the best of your capabilities, ensure it shows initiative, commitment, and a willingness to take on more responsibility.\n"
+        ),
+        color=color
+    )
+    embed.set_footer(text="Kamu Guild • Kaizen")
+    return embed
+
 # --- Admin Views ---
 
 class AcceptModal(ui.Modal, title="Accept Application"):
@@ -700,20 +715,7 @@ class Applications(commands.Cog):
     @app_commands.command(name="tournamentpanel", description="Creates the tournament application panel")
     @app_commands.checks.has_permissions(administrator=True)
     async def tournamentpanel(self, interaction: discord.Interaction):
-        # Create a specific embed for tournament
-        color = discord.Color.from_str("#FFFACD")
-        embed = discord.Embed(
-            title="Tournament Recruitment",
-            description=(
-                "### Welcome to the official tournament recruitment portal.\n\n"
-                "> Tournament applications are a formal process that allows members of Kamu to apply for the upcoming tournament. "
-                "These applications help ensure that only responsible, dedicated, and capable members are selected to represent and support the community.\n\n"
-                "> Take your time with your application to ensure it's made to the best of your capabilities, ensure it shows initiative, commitment, and a willingness to take on more responsibility.\n"
-            ),
-            color=color
-        )
-        embed.set_footer(text="Kamu Guild • Kaizen")
-        
+        embed = generate_tournament_embed(interaction.guild_id)
         view = TournamentView()
         await interaction.response.send_message(embed=embed, view=view)
 
@@ -744,47 +746,14 @@ class Applications(commands.Cog):
         status_data[guild_id][app_type.value] = status.value
         save_app_status(status_data)
         
-        # Auto-update panel if possible
-        updated = False
-        config = load_panel_config()
-        panel_info = config.get(guild_id)
-        
-        if panel_info:
-            try:
-                channel = interaction.guild.get_channel(panel_info["channel_id"])
-                if channel:
-                    message = await channel.fetch_message(panel_info["message_id"])
-                    if message:
-                        new_embeds = generate_panel_embeds(interaction.guild_id)
-                        new_embeds[0].set_thumbnail(url=interaction.guild.icon.url if interaction.guild.icon else None)
-                        await message.edit(embeds=new_embeds, view=ApplicationView())
-                        updated = True
-            except Exception as e:
-                print(f"Failed to auto-update panel: {e}")
-
-        # Send panel if not updated
-        if not updated:
-            embeds = generate_panel_embeds(interaction.guild_id)
-            embeds[0].set_thumbnail(url=interaction.guild.icon.url if interaction.guild.icon else None)
-            
-            msg_panel = await interaction.channel.send(embeds=embeds, view=ApplicationView())
-            
-            # Save message info for auto-updates
-            config = load_panel_config()
-            config[str(interaction.guild_id)] = {
-                "channel_id": interaction.channel_id,
-                "message_id": msg_panel.id
-            }
-            save_panel_config(config)
-            updated = True # Panel was sent
-
-        msg = f"Application status for **{app_type.value}** set to **{status.value}**."
-        if updated:
-            msg += " The panel has been updated or sent."
+        if app_type.value == "Tournament":
+            # Send new tournament panel
+            embed = generate_tournament_embed(interaction.guild_id)
+            view = TournamentView()
+            await interaction.channel.send(embed=embed, view=view)
+            await interaction.followup.send(f"Application status for **{app_type.value}** set to **{status.value}**. A new tournament panel has been sent.", ephemeral=True)
         else:
-            msg += " (Could not auto-update panel. Please run /panel again if needed.)"
-            
-        await interaction.followup.send(msg, ephemeral=True)
+            await interaction.followup.send(f"Application status for **{app_type.value}** set to **{status.value}**.", ephemeral=True)
 
     @app_commands.command(name="setrole", description="Set the role to be given when an application is accepted")
     @app_commands.checks.has_permissions(administrator=True)
