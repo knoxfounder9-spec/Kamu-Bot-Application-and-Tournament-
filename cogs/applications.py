@@ -60,6 +60,7 @@ def generate_panel_embeds(guild_id):
     status_recruiter = get_app_status(guild_id, "Recruiter Team")
     status_trainers = get_app_status(guild_id, "Trainers")
     status_support = get_app_status(guild_id, "Support Team")
+    status_tournament = get_app_status(guild_id, "Tournament")
 
     def get_emoji(status):
         return "🟩" if status == "Open" else "🟥"
@@ -92,7 +93,8 @@ def generate_panel_embeds(guild_id):
             f"> • **Grind Team:** {get_emoji(status_grind)}\n"
             f"> • **Recruiter Team:** {get_emoji(status_recruiter)}\n"
             f"> • **Trainers:** {get_emoji(status_trainers)}\n"
-            f"> • **Support Team:** {get_emoji(status_support)}\n\n"
+            f"> • **Support Team:** {get_emoji(status_support)}\n"
+            f"> • **Tournament:** {get_emoji(status_tournament)}\n\n"
             "> Select an option from the dropdown menu to begin your application process."
         ),
         color=color
@@ -448,6 +450,27 @@ class SupportTeamModal(ui.Modal, title='Support Team Application'):
             ("Activity & Promotion", self.activity_promo.value)
         ])
 
+class TournamentModal(ui.Modal, title='Tournament Application'):
+    def __init__(self):
+        super().__init__()
+
+    region = ui.TextInput(label='What is your region?', style=discord.TextStyle.short, required=True)
+    timezone = ui.TextInput(label='What is your timezone, Ex: "GMT+0"', style=discord.TextStyle.short, required=True)
+    roblox_username = ui.TextInput(label='What is your roblox username?', style=discord.TextStyle.short, required=True)
+    discord_username = ui.TextInput(label='What is your discord username?', style=discord.TextStyle.short, required=True)
+    abide_rules = ui.TextInput(label='Will you abide by the rules?', style=discord.TextStyle.short, required=True)
+    reason = ui.TextInput(label='Reason for entering:', style=discord.TextStyle.paragraph, required=True)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        await send_application_log(interaction, "Tournament", [
+            ("Region", self.region.value),
+            ("Timezone", self.timezone.value),
+            ("Roblox Username", self.roblox_username.value),
+            ("Discord Username", self.discord_username.value),
+            ("Will abide by rules", self.abide_rules.value),
+            ("Reason for entering", self.reason.value)
+        ])
+
 class TrainersModalPart2(ui.Modal, title='Trainers App (Part 2/2)'):
     def __init__(self, part1_data):
         super().__init__()
@@ -581,6 +604,7 @@ class ApplicationSelect(ui.Select):
             discord.SelectOption(label="Recruiter App", description="Apply for the Recruiter Team", emoji="📢"),
             discord.SelectOption(label="Trainers App", description="Apply to become a Trainer", emoji="🎓"),
             discord.SelectOption(label="Support Team App", description="Apply for the Support Team", emoji="🛡️"),
+            discord.SelectOption(label="Tournament App", description="Apply for the Tournament", emoji="🏆"),
         ]
         super().__init__(placeholder="Select an application...", min_values=1, max_values=1, options=options, custom_id="application_select")
 
@@ -593,7 +617,8 @@ class ApplicationSelect(ui.Select):
             "Grind Team App": "Grind Team",
             "Recruiter App": "Recruiter Team",
             "Trainers App": "Trainers",
-            "Support Team App": "Support Team"
+            "Support Team App": "Support Team",
+            "Tournament App": "Tournament"
         }
         
         app_type = app_type_map.get(choice)
@@ -611,6 +636,8 @@ class ApplicationSelect(ui.Select):
             await interaction.response.send_modal(TrainersModalPart1())
         elif choice == "Support Team App":
             await interaction.response.send_modal(SupportTeamModal())
+        elif choice == "Tournament App":
+            await interaction.response.send_modal(TournamentModal())
 
 class ApplicationView(ui.View):
     def __init__(self):
@@ -644,6 +671,34 @@ class Applications(commands.Cog):
         }
         save_panel_config(config)
 
+    @app_commands.command(name="tournamentpanel", description="Creates the tournament application panel")
+    @app_commands.checks.has_permissions(administrator=True)
+    async def tournamentpanel(self, interaction: discord.Interaction):
+        # Create a specific embed for tournament
+        color = discord.Color.from_str("#740000")
+        embed = discord.Embed(
+            title="Tournament Application",
+            description="Click the button below to apply for the upcoming tournament!",
+            color=color
+        )
+        
+        # Create a view with just the tournament button
+        class TournamentView(ui.View):
+            def __init__(self):
+                super().__init__(timeout=None)
+            
+            @ui.button(label="Apply for Tournament", style=discord.ButtonStyle.primary, custom_id="tournament_apply")
+            async def apply(self, interaction: discord.Interaction, button: ui.Button):
+                # Check status
+                status = get_app_status(interaction.guild_id, "Tournament")
+                if status == "Closed":
+                    await interaction.response.send_message("Sorry, tournament applications are currently **CLOSED**.", ephemeral=True)
+                    return
+                await interaction.response.send_modal(TournamentModal())
+        
+        await interaction.response.send_message(embed=embed, view=TournamentView())
+        self.bot.add_view(TournamentView())
+
     @app_commands.command(name="setapp", description="Set the status of an application (Open/Closed)")
     @app_commands.checks.has_permissions(administrator=True)
     @app_commands.describe(
@@ -654,7 +709,8 @@ class Applications(commands.Cog):
         app_commands.Choice(name="Grind Team", value="Grind Team"),
         app_commands.Choice(name="Recruiter Team", value="Recruiter Team"),
         app_commands.Choice(name="Trainers", value="Trainers"),
-        app_commands.Choice(name="Support Team", value="Support Team")
+        app_commands.Choice(name="Support Team", value="Support Team"),
+        app_commands.Choice(name="Tournament", value="Tournament")
     ], status=[
         app_commands.Choice(name="Open", value="Open"),
         app_commands.Choice(name="Closed", value="Closed")
@@ -705,7 +761,8 @@ class Applications(commands.Cog):
         app_commands.Choice(name="Grind Team", value="Grind Team"),
         app_commands.Choice(name="Recruiter Team", value="Recruiter Team"),
         app_commands.Choice(name="Trainers", value="Trainers"),
-        app_commands.Choice(name="Support Team", value="Support Team")
+        app_commands.Choice(name="Support Team", value="Support Team"),
+        app_commands.Choice(name="Tournament", value="Tournament")
     ])
     async def setrole(self, interaction: discord.Interaction, app_type: app_commands.Choice[str], role: discord.Role):
         roles_data = load_roles()
