@@ -260,17 +260,30 @@ class ApplicationReviewView(ui.View):
         if not applicant_id or not app_type:
              await interaction.response.send_message("Could not retrieve application data.", ephemeral=True)
              return
+        
+        if app_type == "Tournament":
+            allowed_role_id = 1477525424362750084
+            if allowed_role_id not in [role.id for role in interaction.user.roles]:
+                await interaction.response.send_message("You do not have permission to accept tournament applications.", ephemeral=True)
+                return
+
         await interaction.response.send_modal(AcceptModal(applicant_id, app_type))
 
     @ui.button(label="Reject", style=discord.ButtonStyle.danger, custom_id="app_reject")
     async def reject_button(self, interaction: discord.Interaction, button: ui.Button):
-        await interaction.response.defer(ephemeral=True)
-        
         applicant_id, app_type = await self.get_data(interaction)
         if not applicant_id or not app_type:
-            await interaction.followup.send("Could not retrieve application data.", ephemeral=True)
+            await interaction.response.send_message("Could not retrieve application data.", ephemeral=True)
             return
 
+        if app_type == "Tournament":
+            allowed_role_id = 1477525424362750084
+            if allowed_role_id not in [role.id for role in interaction.user.roles]:
+                await interaction.response.send_message("You do not have permission to reject tournament applications.", ephemeral=True)
+                return
+        
+        await interaction.response.defer(ephemeral=True)
+        
         guild = interaction.guild
         member = guild.get_member(applicant_id)
         if not member:
