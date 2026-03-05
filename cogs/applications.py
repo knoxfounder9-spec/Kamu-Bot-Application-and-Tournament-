@@ -103,6 +103,38 @@ def generate_panel_embeds(guild_id):
     
     return [embed1, embed2]
 
+async def refresh_panel(guild, channel_id):
+    config = load_panel_config()
+    guild_id = str(guild.id)
+    panel_info = config.get(guild_id)
+    
+    channel = guild.get_channel(channel_id)
+    if not channel:
+        return False
+        
+    new_embeds = generate_panel_embeds(guild.id)
+    new_embeds[0].set_thumbnail(url=guild.icon.url if guild.icon else None)
+    
+    # Try to find existing message
+    message = None
+    if panel_info and panel_info.get("channel_id") == channel_id:
+        try:
+            message = await channel.fetch_message(panel_info["message_id"])
+        except:
+            pass
+            
+    if message:
+        await message.edit(embeds=new_embeds, view=ApplicationView())
+    else:
+        # Send new
+        message = await channel.send(embeds=new_embeds, view=ApplicationView())
+        config[guild_id] = {
+            "channel_id": channel_id,
+            "message_id": message.id
+        }
+        save_panel_config(config)
+    return True
+
 # --- Admin Views ---
 
 class AcceptModal(ui.Modal, title="Accept Application"):
@@ -756,23 +788,13 @@ class Applications(commands.Cog):
         status_data[guild_id][app_type.value] = status.value
         save_app_status(status_data)
         
-        # Auto-update panel if possible
-        updated = False
-        config = load_panel_config()
-        panel_info = config.get(guild_id)
-        
-        if panel_info:
-            try:
-                channel = interaction.guild.get_channel(panel_info["channel_id"])
-                if channel:
-                    message = await channel.fetch_message(panel_info["message_id"])
-                    if message:
-                        new_embeds = generate_panel_embeds(interaction.guild_id)
-                        new_embeds[0].set_thumbnail(url=interaction.guild.icon.url if interaction.guild.icon else None)
-                        await message.edit(embeds=new_embeds, view=ApplicationView())
-                        updated = True
-            except Exception as e:
-                print(f"Failed to auto-update panel: {e}")
+        # Auto-update panel in the designated channel
+        try:
+            await refresh_panel(interaction.guild, 1479007095217983551)
+            updated = True
+        except Exception as e:
+            logger.error(f"Failed to auto-update panel: {e}")
+            updated = False
 
         msg = f"Application status for **{app_type.value}** set to **{status.value}**."
         if updated:
