@@ -41,11 +41,12 @@ class CloseTicketView(discord.ui.View):
     async def add_person(self, interaction: discord.Interaction, button: discord.ui.Button):
         # Check permissions: Admin or Grind Team Role
         user = interaction.user
-        is_admin = user.guild_permissions.administrator
-        grind_role = interaction.guild.get_role(self.grind_role_id)
+        is_admin = False
         has_role = False
-        if grind_role:
-            has_role = grind_role in user.roles
+        
+        if isinstance(user, discord.Member):
+            is_admin = user.guild_permissions.administrator
+            has_role = any(role.id == self.grind_role_id for role in user.roles)
         
         if not (is_admin or has_role):
             await interaction.response.send_message("Only Admins or the Grind Team can add people to this ticket.", ephemeral=True)
@@ -73,11 +74,12 @@ class CloseTicketView(discord.ui.View):
     async def close_ticket(self, interaction: discord.Interaction, button: discord.ui.Button):
         # Check permissions: Admin or Grind Team Role
         user = interaction.user
-        is_admin = user.guild_permissions.administrator
-        grind_role = interaction.guild.get_role(self.grind_role_id)
+        is_admin = False
         has_role = False
-        if grind_role:
-            has_role = grind_role in user.roles
+        
+        if isinstance(user, discord.Member):
+            is_admin = user.guild_permissions.administrator
+            has_role = any(role.id == self.grind_role_id for role in user.roles)
         
         if not (is_admin or has_role):
             await interaction.response.send_message("Only Admins or the Grind Team can close this ticket.", ephemeral=True)
@@ -85,7 +87,10 @@ class CloseTicketView(discord.ui.View):
         
         await interaction.response.send_message("Closing ticket in 5 seconds...")
         await asyncio.sleep(5)
-        await interaction.channel.delete()
+        try:
+            await interaction.channel.delete()
+        except:
+            pass
 
 class GrindingCog(commands.Cog):
     def __init__(self, bot):
@@ -242,13 +247,12 @@ class GrindingCog(commands.Cog):
 
         # Check permissions: Admin or Grind Team Role
         user = interaction.user
-        is_admin = user.guild_permissions.administrator
-        
-        guild = interaction.guild
-        grind_role = guild.get_role(GRIND_TEAM_ROLE_ID)
+        is_admin = False
         has_role = False
-        if grind_role:
-            has_role = grind_role in user.roles
+        
+        if isinstance(user, discord.Member):
+            is_admin = user.guild_permissions.administrator
+            has_role = any(role.id == GRIND_TEAM_ROLE_ID for role in user.roles)
         
         if not (is_admin or has_role):
             await interaction.response.send_message("Only Admins or the Grind Team can close this ticket.", ephemeral=True)
@@ -256,7 +260,10 @@ class GrindingCog(commands.Cog):
 
         await interaction.response.send_message("Closing ticket in 5 seconds...")
         await asyncio.sleep(5)
-        await interaction.channel.delete()
+        try:
+            await interaction.channel.delete()
+        except:
+            pass
 
     # --- Win Management ---
 
