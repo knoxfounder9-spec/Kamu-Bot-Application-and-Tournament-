@@ -682,6 +682,15 @@ class TournamentView(ui.View):
         super().__init__(timeout=None)
         self.add_item(TournamentSelect())
 
+    @ui.button(label="Refresh Application", style=discord.ButtonStyle.primary, custom_id="tournament_open")
+    async def open_button(self, interaction: discord.Interaction, button: ui.Button):
+        # Check status
+        status = get_app_status(interaction.guild_id, "Tournament")
+        if status == "Closed":
+            await interaction.response.send_message("Sorry, tournament applications are currently **CLOSED**.", ephemeral=True)
+            return
+        await interaction.response.send_modal(TournamentModal())
+
 # --- Cog ---
 
 class Applications(commands.Cog):
