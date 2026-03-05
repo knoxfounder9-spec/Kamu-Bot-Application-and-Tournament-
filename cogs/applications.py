@@ -677,27 +677,45 @@ class Applications(commands.Cog):
         # Create a specific embed for tournament
         color = discord.Color.from_str("#740000")
         embed = discord.Embed(
-            title="Tournament Application",
-            description="Click the button below to apply for the upcoming tournament!",
+            title="Tournament Recruitment",
+            description=(
+                "### Welcome to the official tournament recruitment portal.\n\n"
+                "> Tournament applications are a formal process that allows members of Kamu to apply for the upcoming tournament. "
+                "These applications help ensure that only responsible, dedicated, and capable members are selected to represent and support the community.\n\n"
+                "> Take your time with your application to ensure it's made to the best of your capabilities, ensure it shows initiative, commitment, and a willingness to take on more responsibility.\n\n"
+                "**Standard Requirements:**\n\n"
+                "> - Must be 14+\n"
+                "> - Active In the Discord\n"
+                "> - Able to work in a team"
+            ),
             color=color
         )
+        embed.set_footer(text="Kamu Guild • Kaizen")
         
-        # Create a view with just the tournament button
-        class TournamentView(ui.View):
+        # Create a view with a select menu
+        class TournamentSelect(ui.Select):
             def __init__(self):
-                super().__init__(timeout=None)
+                options = [
+                    discord.SelectOption(label="Tournament App", description="Apply for the Tournament", emoji="🏆"),
+                ]
+                super().__init__(placeholder="Select an application...", min_values=1, max_values=1, options=options, custom_id="tournament_select")
             
-            @ui.button(label="Apply for Tournament", style=discord.ButtonStyle.primary, custom_id="tournament_apply")
-            async def apply(self, interaction: discord.Interaction, button: ui.Button):
+            async def callback(self, interaction: discord.Interaction):
                 # Check status
                 status = get_app_status(interaction.guild_id, "Tournament")
                 if status == "Closed":
                     await interaction.response.send_message("Sorry, tournament applications are currently **CLOSED**.", ephemeral=True)
                     return
                 await interaction.response.send_modal(TournamentModal())
+
+        class TournamentView(ui.View):
+            def __init__(self):
+                super().__init__(timeout=None)
+                self.add_item(TournamentSelect())
         
-        await interaction.response.send_message(embed=embed, view=TournamentView())
-        self.bot.add_view(TournamentView())
+        view = TournamentView()
+        await interaction.response.send_message(embed=embed, view=view)
+        self.bot.add_view(view)
 
     @app_commands.command(name="setapp", description="Set the status of an application (Open/Closed)")
     @app_commands.checks.has_permissions(administrator=True)
