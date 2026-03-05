@@ -3,6 +3,11 @@ from discord import app_commands, ui
 from discord.ext import commands
 import os
 import json
+import re
+import logging
+
+# --- Logging ---
+logger = logging.getLogger(__name__)
 
 # --- Constants ---
 LOG_CHANNEL_ID = os.getenv('LOG_CHANNEL_ID')
@@ -98,42 +103,25 @@ def generate_panel_embeds(guild_id):
 
 # --- Admin Views ---
 
-class ApplicationReviewView(ui.View):
-    def __init__(self, applicant_id: int = None, app_type: str = None):
-        super().__init__(timeout=None) # Persistent view for logs
-        self.applicant_id = applicant_id
-        self.app_type = app_type
+class AcceptModal(ui.Modal, title="Accept Application"):
+    def __init__(self, view):
+        super().__init__()
+        self.view = view
 
-    async def get_data(self, interaction: discord.Interaction):
-        """Extracts applicant ID and app type from the embed if not already set."""
-        if self.applicant_id and self.app_type:
-            return self.applicant_id, self.app_type
-        
-        try:
-            embed = interaction.message.embeds[0]
-            # Extract app_type from title "New Grind Team Application"
-            app_type = embed.title.replace("New ", "").replace(" Application", "")
-            
-            # Extract applicant_id from footer "User ID: 123456789"
-            text = embed.footer.text
-            if text:
-                match = re.search(r"User ID:\s*(\d+)", text)
-                if match:
-                    applicant_id = int(match.group(1))
-                    return applicant_id, app_type
-            
-            # Fallback to old method if regex fails
-            applicant_id = int(text.replace("User ID: ", ""))
-            return applicant_id, app_type
-        except Exception as e:
-            logger.error(f"Failed to parse application data from embed: {e}")
-            return None, None
+    optional_message = ui.TextInput(
+        label="Optional Message (Sent to User)",
+        style=discord.TextStyle.paragraph,
+        placeholder="Add a personal note, welcome message, or next steps...",
+        required=False,
+        max_length=1000
+    )
 
-    @ui.button(label="Accept", style=discord.ButtonStyle.success, custom_id="app_accept")
-    async def accept_button(self, interaction: discord.Interaction, button: ui.Button):
+    async def on_submit(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
         
-        applicant_id, app_type = await self.get_data(interaction)
+        # Use the view's get_data method
+        applicant_id, app_type = await self.view.get_data(interaction)
+        
         if not applicant_id or not app_type:
             await interaction.followup.send("Could not retrieve application data. This message might be too old or corrupted.", ephemeral=True)
             return
@@ -205,10 +193,10 @@ class ApplicationReviewView(ui.View):
              embed.add_field(name="Role Action", value=f"Role {role_mention} added.", inline=False)
         
         # Disable buttons
-        for item in self.children:
+        for item in self.view.children:
             item.disabled = True
         
-        await interaction.message.edit(embed=embed, view=self)
+        await interaction.message.edit(embed=embed, view=self.view)
         
         # Notify User
         try:
@@ -217,11 +205,52 @@ class ApplicationReviewView(ui.View):
                 "We saw great potential in your application! Now is the time to show us what you've got. "
                 "Hard work, dedication, and consistency are the keys to success here. Let's reach new heights together! 🚀"
             )
-            await member.send(f"Congratulations! You have been accepted into **{app_type}** by {interaction.user.mention}!{motivation}")
+            
+            msg_content = f"Congratulations! You have been accepted into **{app_type}** by {interaction.user.mention}!{motivation}"
+            
+            if self.optional_message.value:
+                msg_content += f"\n\n**Note from {interaction.user.name}:**\n{self.optional_message.value}"
+                
+            await member.send(msg_content)
         except:
             pass
             
         await interaction.followup.send("Application accepted.", ephemeral=True)
+
+class ApplicationReviewView(ui.View):
+    def __init__(self, applicant_id: int = None, app_type: str = None):
+        super().__init__(timeout=None) # Persistent view for logs
+        self.applicant_id = applicant_id
+        self.app_type = app_type
+
+    async def get_data(self, interaction: discord.Interaction):
+        """Extracts applicant ID and app type from the embed if not already set."""
+        if self.applicant_id and self.app_type:
+            return self.applicant_id, self.app_type
+        
+        try:
+            embed = interaction.message.embeds[0]
+            # Extract app_type from title "New Grind Team Application"
+            app_type = embed.title.replace("New ", "").replace(" Application", "")
+            
+            # Extract applicant_id from footer "User ID: 123456789"
+            text = embed.footer.text
+            if text:
+                match = re.search(r"User ID:\s*(\d+)", text)
+                if match:
+                    applicant_id = int(match.group(1))
+                    return applicant_id, app_type
+            
+            # Fallback to old method if regex fails
+            applicant_id = int(text.replace("User ID: ", ""))
+            return applicant_id, app_type
+        except Exception as e:
+            logger.error(f"Failed to parse application data from embed: {e}")
+            return None, None
+
+    @ui.button(label="Accept", style=discord.ButtonStyle.success, custom_id="app_accept")
+    async def accept_button(self, interaction: discord.Interaction, button: ui.Button):
+        await interaction.response.send_modal(AcceptModal(self))
 
     @ui.button(label="Reject", style=discord.ButtonStyle.danger, custom_id="app_reject")
     async def reject_button(self, interaction: discord.Interaction, button: ui.Button):
