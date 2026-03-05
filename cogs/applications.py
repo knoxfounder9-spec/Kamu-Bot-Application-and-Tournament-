@@ -113,24 +113,21 @@ async def refresh_panel(guild, channel_id):
         return False
         
     new_embeds = generate_tournament_panel_embeds(guild.id)
+    view = TournamentView()
     
-    # Try to find existing message
-    message = None
+    # Try to find existing message and edit it
     if panel_info and panel_info.get("channel_id") == channel_id:
         try:
             message = await channel.fetch_message(panel_info["message_id"])
-        except:
-            pass
+            await message.edit(embeds=new_embeds, view=view)
+            return True
+        except discord.NotFound:
+            pass # Message not found, will create new one
+        except Exception as e:
+            logger.error(f"Failed to edit panel message: {e}")
             
-    # Delete old message if it exists
-    if message:
-        try:
-            await message.delete()
-        except:
-            pass
-            
-    # Send new message
-    message = await channel.send(embeds=new_embeds, view=TournamentView())
+    # Send new message if edit failed or message didn't exist
+    message = await channel.send(embeds=new_embeds, view=view)
     config[guild_id] = {
         "channel_id": channel_id,
         "message_id": message.id
@@ -741,6 +738,7 @@ class Applications(commands.Cog):
     async def cog_load(self):
         self.bot.add_view(ApplicationView())
         self.bot.add_view(ApplicationReviewView())
+        self.bot.add_view(TournamentView())
 
     @app_commands.command(name="tournamentpanel", description="Creates the tournament application panel")
     @app_commands.checks.has_permissions(administrator=True)
@@ -748,7 +746,15 @@ class Applications(commands.Cog):
         view = TournamentView()
         embeds = generate_tournament_panel_embeds(interaction.guild_id)
         await interaction.response.send_message(embeds=embeds, view=view)
-        self.bot.add_view(view)
+        message = await interaction.original_response()
+        
+        # Save config
+        config = load_panel_config()
+        config[str(interaction.guild_id)] = {
+            "channel_id": interaction.channel_id,
+            "message_id": message.id
+        }
+        save_panel_config(config)
 
     @app_commands.command(name="setapp", description="Set the status of an application (Open/Closed)")
     @app_commands.checks.has_permissions(administrator=True)
@@ -779,12 +785,16 @@ class Applications(commands.Cog):
         # Auto-update panel in the designated channel
         updated = False
         if app_type.value == "Tournament":
-            try:
-                await refresh_panel(interaction.guild, 1479007095217983551)
-                updated = True
-            except Exception as e:
-                logger.error(f"Failed to auto-update panel: {e}")
-                updated = False
+            config = load_panel_config()
+            panel_info = config.get(guild_id)
+            if panel_info:
+                channel_id = panel_info.get("channel_id")
+                if channel_id:
+                    try:
+                        await refresh_panel(interaction.guild, channel_id)
+                        updated = True
+                    except Exception as e:
+                        logger.error(f"Failed to auto-update panel: {e}")
 
         msg = f"Application status for **{app_type.value}** set to **{status.value}**."
         if updated:
