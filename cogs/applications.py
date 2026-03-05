@@ -613,7 +613,6 @@ class ApplicationSelect(ui.Select):
             discord.SelectOption(label="Recruiter App", description="Apply for the Recruiter Team", emoji="📢"),
             discord.SelectOption(label="Trainers App", description="Apply to become a Trainer", emoji="🎓"),
             discord.SelectOption(label="Support Team App", description="Apply for the Support Team", emoji="🛡️"),
-            discord.SelectOption(label="Tournament App", description="Apply for the Tournament", emoji="🏆"),
         ]
         super().__init__(placeholder="Select an application...", min_values=1, max_values=1, options=options, custom_id="application_select")
 
@@ -627,7 +626,6 @@ class ApplicationSelect(ui.Select):
             "Recruiter App": "Recruiter Team",
             "Trainers App": "Trainers",
             "Support Team App": "Support Team",
-            "Tournament App": "Tournament"
         }
         
         app_type = app_type_map.get(choice)
@@ -645,8 +643,6 @@ class ApplicationSelect(ui.Select):
             await interaction.response.send_modal(TrainersModalPart1())
         elif choice == "Support Team App":
             await interaction.response.send_modal(SupportTeamModal())
-        elif choice == "Tournament App":
-            await interaction.response.send_modal(TournamentModal())
 
 class ApplicationView(ui.View):
     def __init__(self):
