@@ -56,7 +56,7 @@ def save_panel_config(config_data):
     with open(PANEL_CONFIG_FILE, 'w') as f:
         json.dump(config_data, f, indent=4)
 
-def generate_panel_embeds(guild_id):
+def generate_recruitment_panel_embeds(guild_id):
     status_grind = get_app_status(guild_id, "Grind Team")
     status_recruiter = get_app_status(guild_id, "Recruiter Team")
     status_trainers = get_app_status(guild_id, "Trainers")
@@ -637,7 +637,7 @@ class TournamentView(ui.View):
 
 def generate_tournament_panel_embeds(guild_id):
     status_tournament = get_app_status(guild_id, "Tournament")
-    color = discord.Color.from_str("#FFFACD")
+    color = discord.Color(0xFFFACD)
     
     embed = discord.Embed(
         title="Tournament Recruitment",
@@ -681,12 +681,14 @@ async def send_application_log(interaction: discord.Interaction, app_type: str, 
     if not log_channel:
         log_channel = discord.utils.get(interaction.guild.text_channels, name='application-logs')
 
+    await interaction.response.defer(ephemeral=True)
+
     if log_channel:
         view = ApplicationReviewView(applicant_id=interaction.user.id, app_type=app_type)
         await log_channel.send(embed=embed, view=view)
-        await interaction.response.send_message("Application submitted successfully!", ephemeral=True)
+        await interaction.followup.send("Application submitted successfully!", ephemeral=True)
     else:
-        await interaction.response.send_message("Application submitted! (Note: 'application-logs' channel not found, so admins might not see this immediately.)", ephemeral=True)
+        await interaction.followup.send("Application submitted! (Note: 'application-logs' channel not found, so admins might not see this immediately.)", ephemeral=True)
 
 
 # --- Views ---
