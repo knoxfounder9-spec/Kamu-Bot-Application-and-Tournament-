@@ -104,9 +104,10 @@ def generate_panel_embeds(guild_id):
 # --- Admin Views ---
 
 class AcceptModal(ui.Modal, title="Accept Application"):
-    def __init__(self, view):
+    def __init__(self, applicant_id, app_type):
         super().__init__()
-        self.view = view
+        self.applicant_id = applicant_id
+        self.app_type = app_type
 
     optional_message = ui.TextInput(
         label="Optional Message (Sent to User)",
@@ -119,8 +120,8 @@ class AcceptModal(ui.Modal, title="Accept Application"):
     async def on_submit(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
         
-        # Use the view's get_data method
-        applicant_id, app_type = await self.view.get_data(interaction)
+        applicant_id = self.applicant_id
+        app_type = self.app_type
         
         if not applicant_id or not app_type:
             await interaction.followup.send("Could not retrieve application data. This message might be too old or corrupted.", ephemeral=True)
@@ -192,11 +193,12 @@ class AcceptModal(ui.Modal, title="Accept Application"):
         if role_added:
              embed.add_field(name="Role Action", value=f"Role {role_mention} added.", inline=False)
         
-        # Disable buttons
-        for item in self.view.children:
+        # Disable buttons - Create new view to avoid singleton issues
+        new_view = ApplicationReviewView(applicant_id, app_type)
+        for item in new_view.children:
             item.disabled = True
         
-        await interaction.message.edit(embed=embed, view=self.view)
+        await interaction.message.edit(embed=embed, view=new_view)
         
         # Notify User
         try:
@@ -242,15 +244,21 @@ class ApplicationReviewView(ui.View):
                     return applicant_id, app_type
             
             # Fallback to old method if regex fails
-            applicant_id = int(text.replace("User ID: ", ""))
-            return applicant_id, app_type
+            if text:
+                applicant_id = int(text.replace("User ID: ", ""))
+                return applicant_id, app_type
+            return None, None
         except Exception as e:
             logger.error(f"Failed to parse application data from embed: {e}")
             return None, None
 
     @ui.button(label="Accept", style=discord.ButtonStyle.success, custom_id="app_accept")
     async def accept_button(self, interaction: discord.Interaction, button: ui.Button):
-        await interaction.response.send_modal(AcceptModal(self))
+        applicant_id, app_type = await self.get_data(interaction)
+        if not applicant_id or not app_type:
+             await interaction.response.send_message("Could not retrieve application data.", ephemeral=True)
+             return
+        await interaction.response.send_modal(AcceptModal(applicant_id, app_type))
 
     @ui.button(label="Reject", style=discord.ButtonStyle.danger, custom_id="app_reject")
     async def reject_button(self, interaction: discord.Interaction, button: ui.Button):
@@ -274,11 +282,12 @@ class ApplicationReviewView(ui.View):
         embed.color = discord.Color.red()
         embed.add_field(name="Status", value=f"Rejected by {interaction.user.mention}", inline=False)
         
-        # Disable buttons
-        for item in self.children:
+        # Disable buttons - Create new view
+        new_view = ApplicationReviewView(applicant_id, app_type)
+        for item in new_view.children:
             item.disabled = True
             
-        await interaction.message.edit(embed=embed, view=self)
+        await interaction.message.edit(embed=embed, view=new_view)
         
         # Notify User
         if member:

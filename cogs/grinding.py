@@ -6,6 +6,7 @@ import os
 import math
 import datetime
 import time
+import asyncio
 
 GRIND_STATS_FILE = 'grind_stats.json'
 GRIND_BLACKLIST_FILE = 'grind_blacklist.json'
@@ -72,17 +73,24 @@ class CloseTicketView(discord.ui.View):
 
     @discord.ui.button(label="Close Ticket", style=discord.ButtonStyle.danger, emoji="🔒", custom_id="ticket_close")
     async def close_ticket(self, interaction: discord.Interaction, button: discord.ui.Button):
-        # Check permissions: Admin or Grind Team Role
+        # Check permissions: Admin or Grind Team Role or Ticket Owner
         user = interaction.user
         is_admin = False
         has_role = False
+        is_ticket_owner = False
         
         if isinstance(user, discord.Member):
             is_admin = user.guild_permissions.administrator
             has_role = any(role.id == self.grind_role_id for role in user.roles)
+            
+            # Check if user is the ticket owner (based on channel name convention)
+            # Channel name format: username-type-number
+            sanitized_name = user.name.lower().replace(" ", "-")
+            if interaction.channel.name.startswith(sanitized_name):
+                is_ticket_owner = True
         
-        if not (is_admin or has_role):
-            await interaction.response.send_message("Only Admins or the Grind Team can close this ticket.", ephemeral=True)
+        if not (is_admin or has_role or is_ticket_owner):
+            await interaction.response.send_message("Only Admins, the Grind Team, or the ticket owner can close this ticket.", ephemeral=True)
             return
         
         await interaction.response.send_message("Closing ticket in 5 seconds...")
@@ -245,17 +253,24 @@ class GrindingCog(commands.Cog):
              await interaction.response.send_message("This command can only be used in a Grind Ticket channel.", ephemeral=True)
              return
 
-        # Check permissions: Admin or Grind Team Role
+        # Check permissions: Admin or Grind Team Role or Ticket Owner
         user = interaction.user
         is_admin = False
         has_role = False
+        is_ticket_owner = False
         
         if isinstance(user, discord.Member):
             is_admin = user.guild_permissions.administrator
             has_role = any(role.id == GRIND_TEAM_ROLE_ID for role in user.roles)
+            
+            # Check if user is the ticket owner (based on channel name convention)
+            # Channel name format: username-type-number
+            sanitized_name = user.name.lower().replace(" ", "-")
+            if interaction.channel.name.startswith(sanitized_name):
+                is_ticket_owner = True
         
-        if not (is_admin or has_role):
-            await interaction.response.send_message("Only Admins or the Grind Team can close this ticket.", ephemeral=True)
+        if not (is_admin or has_role or is_ticket_owner):
+            await interaction.response.send_message("Only Admins, the Grind Team, or the ticket owner can close this ticket.", ephemeral=True)
             return
 
         await interaction.response.send_message("Closing ticket in 5 seconds...")
