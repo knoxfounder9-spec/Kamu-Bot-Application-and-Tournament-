@@ -1,5 +1,6 @@
 {
   "scripts": {
-    "start": "python main.py"
+    "start": "python3 main.py",
+    "lint": "python3 -m py_compile main.py cogs/*.py"
   }
 }

@@ -1,10 +1,11 @@
 import discord
 from discord import app_commands, ui
-from discord.ext import commands
+from discord.ext import commands, tasks
 import os
 import json
 import re
 import logging
+import asyncio
 
 # --- Logging ---
 logger = logging.getLogger(__name__)
@@ -734,11 +735,39 @@ class ApplicationView(ui.View):
 class Applications(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
+        self.maintain_panel_task.start()
+
+    def cog_unload(self):
+        self.maintain_panel_task.cancel()
 
     async def cog_load(self):
         self.bot.add_view(ApplicationView())
         self.bot.add_view(ApplicationReviewView())
         self.bot.add_view(TournamentView())
+
+    @tasks.loop(minutes=10)
+    async def maintain_panel_task(self):
+        """Periodically ensures the tournament panel is up to date."""
+        await self.bot.wait_until_ready()
+        for guild in self.bot.guilds:
+            config = load_panel_config()
+            guild_id = str(guild.id)
+            panel_info = config.get(guild_id)
+            
+            channel_id = None
+            if panel_info:
+                channel_id = panel_info.get("channel_id")
+            else:
+                # Try to auto-detect channel
+                channel = discord.utils.get(guild.text_channels, name='tournament-recruitment')
+                if channel:
+                    channel_id = channel.id
+            
+            if channel_id:
+                try:
+                    await refresh_panel(guild, channel_id)
+                except Exception as e:
+                    logger.error(f"Error in maintain_panel_task for guild {guild.id}: {e}")
 
     @app_commands.command(name="tournamentpanel", description="Creates the tournament application panel")
     @app_commands.checks.has_permissions(administrator=True)
@@ -787,14 +816,22 @@ class Applications(commands.Cog):
         if app_type.value == "Tournament":
             config = load_panel_config()
             panel_info = config.get(guild_id)
+            
+            channel_id = None
             if panel_info:
                 channel_id = panel_info.get("channel_id")
-                if channel_id:
-                    try:
-                        await refresh_panel(interaction.guild, channel_id)
-                        updated = True
-                    except Exception as e:
-                        logger.error(f"Failed to auto-update panel: {e}")
+            else:
+                # Try to auto-detect
+                channel = discord.utils.get(interaction.guild.text_channels, name='tournament-recruitment')
+                if channel:
+                    channel_id = channel.id
+            
+            if channel_id:
+                try:
+                    await refresh_panel(interaction.guild, channel_id)
+                    updated = True
+                except Exception as e:
+                    logger.error(f"Failed to auto-update panel: {e}")
 
         msg = f"Application status for **{app_type.value}** set to **{status.value}**."
         if updated:
