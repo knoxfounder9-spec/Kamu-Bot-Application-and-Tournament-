@@ -104,7 +104,7 @@ def generate_panel_embeds(guild_id):
     
     return [embed1, embed2]
 
-async def refresh_panel(guild, channel_id):
+async def refresh_panel(guild, channel_id, force_new=False):
     config = load_panel_config()
     guild_id = str(guild.id)
     panel_info = config.get(guild_id)
@@ -117,7 +117,7 @@ async def refresh_panel(guild, channel_id):
     view = TournamentView()
     
     # Try to find existing message and edit it
-    if panel_info and panel_info.get("channel_id") == channel_id:
+    if not force_new and panel_info and panel_info.get("channel_id") == channel_id:
         try:
             message = await channel.fetch_message(panel_info["message_id"])
             await message.edit(embeds=new_embeds, view=view)
@@ -127,7 +127,15 @@ async def refresh_panel(guild, channel_id):
         except Exception as e:
             logger.error(f"Failed to edit panel message: {e}")
             
-    # Send new message if edit failed or message didn't exist
+    # If force_new, try to delete old message
+    if force_new and panel_info and panel_info.get("channel_id") == channel_id:
+        try:
+            message = await channel.fetch_message(panel_info["message_id"])
+            await message.delete()
+        except:
+            pass
+            
+    # Send new message if edit failed or message didn't exist or force_new
     message = await channel.send(embeds=new_embeds, view=view)
     config[guild_id] = {
         "channel_id": channel_id,
@@ -744,11 +752,17 @@ class Applications(commands.Cog):
         self.bot.add_view(ApplicationView())
         self.bot.add_view(ApplicationReviewView())
         self.bot.add_view(TournamentView())
+        # Trigger immediate update on load
+        await self.bot.wait_until_ready()
+        await self.update_all_panels()
 
     @tasks.loop(minutes=10)
     async def maintain_panel_task(self):
         """Periodically ensures the tournament panel is up to date."""
         await self.bot.wait_until_ready()
+        await self.update_all_panels()
+
+    async def update_all_panels(self):
         for guild in self.bot.guilds:
             config = load_panel_config()
             guild_id = str(guild.id)
@@ -767,7 +781,7 @@ class Applications(commands.Cog):
                 try:
                     await refresh_panel(guild, channel_id)
                 except Exception as e:
-                    logger.error(f"Error in maintain_panel_task for guild {guild.id}: {e}")
+                    logger.error(f"Error in update_all_panels for guild {guild.id}: {e}")
 
     @app_commands.command(name="tournamentpanel", description="Creates the tournament application panel")
     @app_commands.checks.has_permissions(administrator=True)
@@ -828,7 +842,7 @@ class Applications(commands.Cog):
             
             if channel_id:
                 try:
-                    await refresh_panel(interaction.guild, channel_id)
+                    await refresh_panel(interaction.guild, channel_id, force_new=True)
                     updated = True
                 except Exception as e:
                     logger.error(f"Failed to auto-update panel: {e}")
