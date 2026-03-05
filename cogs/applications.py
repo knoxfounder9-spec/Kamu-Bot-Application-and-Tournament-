@@ -113,8 +113,17 @@ class ApplicationReviewView(ui.View):
             embed = interaction.message.embeds[0]
             # Extract app_type from title "New Grind Team Application"
             app_type = embed.title.replace("New ", "").replace(" Application", "")
+            
             # Extract applicant_id from footer "User ID: 123456789"
-            applicant_id = int(embed.footer.text.replace("User ID: ", ""))
+            text = embed.footer.text
+            if text:
+                match = re.search(r"User ID:\s*(\d+)", text)
+                if match:
+                    applicant_id = int(match.group(1))
+                    return applicant_id, app_type
+            
+            # Fallback to old method if regex fails
+            applicant_id = int(text.replace("User ID: ", ""))
             return applicant_id, app_type
         except Exception as e:
             logger.error(f"Failed to parse application data from embed: {e}")
@@ -129,16 +138,40 @@ class ApplicationReviewView(ui.View):
             await interaction.followup.send("Could not retrieve application data. This message might be too old or corrupted.", ephemeral=True)
             return
 
+        # Validate ID length (Discord IDs are typically 17-19 digits)
+        if len(str(applicant_id)) < 17:
+            await interaction.followup.send(f"Invalid Applicant ID detected: {applicant_id}. Please check the footer.", ephemeral=True)
+            return
+
         guild = interaction.guild
         member = guild.get_member(applicant_id)
+        
         if not member:
             try:
                 member = await guild.fetch_member(applicant_id)
-            except:
-                pass
+            except discord.NotFound:
+                logger.warning(f"Member {applicant_id} not found in guild {guild.id}")
+            except discord.Forbidden:
+                logger.warning(f"Missing permissions to fetch member {applicant_id} in guild {guild.id}")
+            except Exception as e:
+                logger.error(f"Failed to fetch member {applicant_id}: {e}")
         
         if not member:
-            await interaction.followup.send("Member not found in the server. They might have left.", ephemeral=True)
+            # Debugging: Check if user exists globally
+            user_exists = False
+            try:
+                await interaction.client.fetch_user(applicant_id)
+                user_exists = True
+            except:
+                pass
+            
+            msg = f"Member (ID: {applicant_id}) not found in this server."
+            if user_exists:
+                msg += " The user exists on Discord but is not in this server."
+            else:
+                msg += " The user ID seems invalid or the user has been deleted."
+                
+            await interaction.followup.send(msg, ephemeral=True)
             return
 
         role_id = get_role_id(guild.id, app_type)
