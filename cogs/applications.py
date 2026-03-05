@@ -1,11 +1,10 @@
 import discord
 from discord import app_commands, ui
-from discord.ext import commands, tasks
+from discord.ext import commands
 import os
 import json
 import re
 import logging
-import asyncio
 
 # --- Logging ---
 logger = logging.getLogger(__name__)
@@ -15,7 +14,6 @@ LOG_CHANNEL_ID = os.getenv('LOG_CHANNEL_ID')
 ROLES_FILE = 'roles.json'
 APP_STATUS_FILE = 'app_status.json'
 PANEL_CONFIG_FILE = 'panel_config.json'
-RECRUITMENT_PANEL_CONFIG_FILE = 'recruitment_panel_config.json'
 
 # --- Helper Functions for Roles & Status ---
 def load_roles():
@@ -57,17 +55,7 @@ def save_panel_config(config_data):
     with open(PANEL_CONFIG_FILE, 'w') as f:
         json.dump(config_data, f, indent=4)
 
-def load_recruitment_panel_config():
-    if not os.path.exists(RECRUITMENT_PANEL_CONFIG_FILE):
-        return {}
-    with open(RECRUITMENT_PANEL_CONFIG_FILE, 'r') as f:
-        return json.load(f)
-
-def save_recruitment_panel_config(config_data):
-    with open(RECRUITMENT_PANEL_CONFIG_FILE, 'w') as f:
-        json.dump(config_data, f, indent=4)
-
-def generate_recruitment_panel_embeds(guild_id):
+def generate_panel_embeds(guild_id):
     status_grind = get_app_status(guild_id, "Grind Team")
     status_recruiter = get_app_status(guild_id, "Recruiter Team")
     status_trainers = get_app_status(guild_id, "Trainers")
@@ -114,46 +102,6 @@ def generate_recruitment_panel_embeds(guild_id):
     embed2.set_footer(text="Kamu Guild • Kaizen")
     
     return [embed1, embed2]
-
-async def refresh_panel(guild, channel_id, force_new=False):
-    config = load_panel_config()
-    guild_id = str(guild.id)
-    panel_info = config.get(guild_id)
-    
-    channel = guild.get_channel(channel_id)
-    if not channel:
-        return False
-        
-    new_embeds = generate_tournament_panel_embeds(guild.id)
-    view = TournamentView()
-    
-    # Try to find existing message and edit it
-    if not force_new and panel_info and panel_info.get("channel_id") == channel_id:
-        try:
-            message = await channel.fetch_message(panel_info["message_id"])
-            await message.edit(embeds=new_embeds, view=view)
-            return True
-        except discord.NotFound:
-            pass # Message not found, will create new one
-        except Exception as e:
-            logger.error(f"Failed to edit panel message: {e}")
-            
-    # If force_new, try to delete old message
-    if force_new and panel_info and panel_info.get("channel_id") == channel_id:
-        try:
-            message = await channel.fetch_message(panel_info["message_id"])
-            await message.delete()
-        except:
-            pass
-            
-    # Send new message if edit failed or message didn't exist or force_new
-    message = await channel.send(embeds=new_embeds, view=view)
-    config[guild_id] = {
-        "channel_id": channel_id,
-        "message_id": message.id
-    }
-    save_panel_config(config)
-    return True
 
 # --- Admin Views ---
 
@@ -624,46 +572,6 @@ class TrainersModalPart1(ui.Modal, title='Trainers App (Part 1/2)'):
             ephemeral=True
         )
 
-# --- Tournament Panel Components ---
-
-class TournamentSelect(ui.Select):
-    def __init__(self):
-        options = [
-            discord.SelectOption(label="Tournament App", description="Apply for the Tournament", emoji="🏆"),
-        ]
-        super().__init__(placeholder="Select an application...", min_values=1, max_values=1, options=options, custom_id="tournament_select")
-    
-    async def callback(self, interaction: discord.Interaction):
-        # Check status
-        status = get_app_status(interaction.guild_id, "Tournament")
-        if status == "Closed":
-            await interaction.response.send_message("Sorry, tournament applications are currently **CLOSED**.", ephemeral=True)
-            return
-        await interaction.response.send_modal(TournamentModal())
-
-class TournamentView(ui.View):
-    def __init__(self):
-        super().__init__(timeout=None)
-        self.add_item(TournamentSelect())
-
-def generate_tournament_panel_embeds(guild_id):
-    status_tournament = get_app_status(guild_id, "Tournament")
-    color = discord.Color(0xFFFACD)
-    
-    embed = discord.Embed(
-        title="Tournament Recruitment",
-        description=(
-            "### Welcome to the official tournament recruitment portal.\n\n"
-            "> Tournament applications are a formal process that allows members of Kamu to apply for the upcoming tournament. "
-            "These applications help ensure that only responsible, dedicated, and capable members are selected to represent and support the community.\n\n"
-            "> Take your time with your application to ensure it's made to the best of your capabilities, ensure it shows initiative, commitment, and a willingness to take on more responsibility.\n\n"
-            "**Status:** " + ("🟩 Open" if status_tournament == "Open" else "🟥 Closed")
-        ),
-        color=color
-    )
-    embed.set_footer(text="Kamu Guild • Kaizen")
-    return [embed]
-
 # --- Helper Functions ---
 
 async def send_application_log(interaction: discord.Interaction, app_type: str, fields: list):
@@ -692,14 +600,12 @@ async def send_application_log(interaction: discord.Interaction, app_type: str, 
     if not log_channel:
         log_channel = discord.utils.get(interaction.guild.text_channels, name='application-logs')
 
-    await interaction.response.defer(ephemeral=True)
-
     if log_channel:
         view = ApplicationReviewView(applicant_id=interaction.user.id, app_type=app_type)
         await log_channel.send(embed=embed, view=view)
-        await interaction.followup.send("Application submitted successfully!", ephemeral=True)
+        await interaction.response.send_message("Application submitted successfully!", ephemeral=True)
     else:
-        await interaction.followup.send("Application submitted! (Note: 'application-logs' channel not found, so admins might not see this immediately.)", ephemeral=True)
+        await interaction.response.send_message("Application submitted! (Note: 'application-logs' channel not found, so admins might not see this immediately.)", ephemeral=True)
 
 
 # --- Views ---
@@ -756,55 +662,21 @@ class ApplicationView(ui.View):
 class Applications(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.maintain_panel_task.start()
-
-    def cog_unload(self):
-        self.maintain_panel_task.cancel()
 
     async def cog_load(self):
         self.bot.add_view(ApplicationView())
         self.bot.add_view(ApplicationReviewView())
-        self.bot.add_view(TournamentView())
-        # Trigger immediate update on load
-        await self.bot.wait_until_ready()
-        await self.update_all_panels()
 
-    @tasks.loop(minutes=10)
-    async def maintain_panel_task(self):
-        """Periodically ensures the tournament panel is up to date."""
-        await self.bot.wait_until_ready()
-        await self.update_all_panels()
-
-    async def update_all_panels(self):
-        for guild in self.bot.guilds:
-            config = load_panel_config()
-            guild_id = str(guild.id)
-            panel_info = config.get(guild_id)
-            
-            channel_id = None
-            if panel_info:
-                channel_id = panel_info.get("channel_id")
-            else:
-                # Try to auto-detect channel
-                channel = discord.utils.get(guild.text_channels, name='tournament-recruitment')
-                if channel:
-                    channel_id = channel.id
-            
-            if channel_id:
-                try:
-                    await refresh_panel(guild, channel_id)
-                except Exception as e:
-                    logger.error(f"Error in update_all_panels for guild {guild.id}: {e}")
-
-    @app_commands.command(name="tournamentpanel", description="Creates the tournament application panel")
+    @app_commands.command(name="panel", description="Creates the application panel")
     @app_commands.checks.has_permissions(administrator=True)
-    async def tournamentpanel(self, interaction: discord.Interaction):
-        view = TournamentView()
-        embeds = generate_tournament_panel_embeds(interaction.guild_id)
-        await interaction.response.send_message(embeds=embeds, view=view)
-        message = await interaction.original_response()
+    async def panel(self, interaction: discord.Interaction):
+        embeds = generate_panel_embeds(interaction.guild_id)
+        embeds[0].set_thumbnail(url=interaction.guild.icon.url if interaction.guild.icon else None)
         
-        # Save config
+        await interaction.response.send_message(embeds=embeds, view=ApplicationView())
+        
+        # Save message info for auto-updates
+        message = await interaction.original_response()
         config = load_panel_config()
         config[str(interaction.guild_id)] = {
             "channel_id": interaction.channel_id,
@@ -812,26 +684,51 @@ class Applications(commands.Cog):
         }
         save_panel_config(config)
 
-    @app_commands.command(name="recruitmentpanel", description="Creates the general recruitment application panel")
+    @app_commands.command(name="tournamentpanel", description="Creates the tournament application panel")
     @app_commands.checks.has_permissions(administrator=True)
-    async def recruitmentpanel(self, interaction: discord.Interaction):
-        logger.info(f"Recruitment panel command called in guild {interaction.guild_id}")
-        try:
-            view = ApplicationView()
-            embeds = generate_recruitment_panel_embeds(interaction.guild_id)
-            await interaction.response.send_message(embeds=embeds, view=view)
-            message = await interaction.original_response()
+    async def tournamentpanel(self, interaction: discord.Interaction):
+        # Create a specific embed for tournament
+        color = discord.Color.from_str("#FFFACD")
+        embed = discord.Embed(
+            title="Tournament Recruitment",
+            description=(
+                "### Welcome to the official tournament recruitment portal.\n\n"
+                "> Tournament applications are a formal process that allows members of Kamu to apply for the upcoming tournament. "
+                "These applications help ensure that only responsible, dedicated, and capable members are selected to represent and support the community.\n\n"
+                "> Take your time with your application to ensure it's made to the best of your capabilities, ensure it shows initiative, commitment, and a willingness to take on more responsibility.\n\n"
+                "**Standard Requirements:**\n\n"
+                "> - Must be 14+\n"
+                "> - Active In the Discord\n"
+                "> - Able to work in a team"
+            ),
+            color=color
+        )
+        embed.set_footer(text="Kamu Guild • Kaizen")
+        
+        # Create a view with a select menu
+        class TournamentSelect(ui.Select):
+            def __init__(self):
+                options = [
+                    discord.SelectOption(label="Tournament App", description="Apply for the Tournament", emoji="🏆"),
+                ]
+                super().__init__(placeholder="Select an application...", min_values=1, max_values=1, options=options, custom_id="tournament_select")
             
-            # Save config
-            config = load_recruitment_panel_config()
-            config[str(interaction.guild_id)] = {
-                "channel_id": interaction.channel_id,
-                "message_id": message.id
-            }
-            save_recruitment_panel_config(config)
-        except Exception as e:
-            logger.error(f"Error in recruitmentpanel: {e}")
-            await interaction.followup.send(f"An error occurred: {e}", ephemeral=True)
+            async def callback(self, interaction: discord.Interaction):
+                # Check status
+                status = get_app_status(interaction.guild_id, "Tournament")
+                if status == "Closed":
+                    await interaction.response.send_message("Sorry, tournament applications are currently **CLOSED**.", ephemeral=True)
+                    return
+                await interaction.response.send_modal(TournamentModal())
+
+        class TournamentView(ui.View):
+            def __init__(self):
+                super().__init__(timeout=None)
+                self.add_item(TournamentSelect())
+        
+        view = TournamentView()
+        await interaction.response.send_message(embed=embed, view=view)
+        self.bot.add_view(view)
 
     @app_commands.command(name="setapp", description="Set the status of an application (Open/Closed)")
     @app_commands.checks.has_permissions(administrator=True)
@@ -859,33 +756,29 @@ class Applications(commands.Cog):
         status_data[guild_id][app_type.value] = status.value
         save_app_status(status_data)
         
-        # Auto-update panel in the designated channel
+        # Auto-update panel if possible
         updated = False
-        if app_type.value == "Tournament":
-            config = load_panel_config()
-            panel_info = config.get(guild_id)
-            
-            channel_id = None
-            if panel_info:
-                channel_id = panel_info.get("channel_id")
-            else:
-                # Try to auto-detect
-                channel = discord.utils.get(interaction.guild.text_channels, name='tournament-recruitment')
+        config = load_panel_config()
+        panel_info = config.get(guild_id)
+        
+        if panel_info:
+            try:
+                channel = interaction.guild.get_channel(panel_info["channel_id"])
                 if channel:
-                    channel_id = channel.id
-            
-            if channel_id:
-                try:
-                    await refresh_panel(interaction.guild, channel_id, force_new=True)
-                    updated = True
-                except Exception as e:
-                    logger.error(f"Failed to auto-update panel: {e}")
+                    message = await channel.fetch_message(panel_info["message_id"])
+                    if message:
+                        new_embeds = generate_panel_embeds(interaction.guild_id)
+                        new_embeds[0].set_thumbnail(url=interaction.guild.icon.url if interaction.guild.icon else None)
+                        await message.edit(embeds=new_embeds, view=ApplicationView())
+                        updated = True
+            except Exception as e:
+                print(f"Failed to auto-update panel: {e}")
 
         msg = f"Application status for **{app_type.value}** set to **{status.value}**."
         if updated:
             msg += " The panel has been updated."
-        elif app_type.value == "Tournament":
-            msg += " (Could not auto-update panel. Please run /tournamentpanel again if needed.)"
+        else:
+            msg += " (Could not auto-update panel. Please run /panel again if needed.)"
             
         await interaction.response.send_message(msg, ephemeral=True)
 
