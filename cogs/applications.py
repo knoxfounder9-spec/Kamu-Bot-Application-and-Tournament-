@@ -801,6 +801,13 @@ class Applications(commands.Cog):
         }
         save_panel_config(config)
 
+    @app_commands.command(name="recruitmentpanel", description="Creates the general recruitment application panel")
+    @app_commands.checks.has_permissions(administrator=True)
+    async def recruitmentpanel(self, interaction: discord.Interaction):
+        view = ApplicationView()
+        embeds = generate_recruitment_panel_embeds(interaction.guild_id)
+        await interaction.response.send_message(embeds=embeds, view=view)
+
     @app_commands.command(name="setapp", description="Set the status of an application (Open/Closed)")
     @app_commands.checks.has_permissions(administrator=True)
     @app_commands.describe(
