@@ -75,11 +75,7 @@ def generate_panel_embeds(guild_id):
             "### Welcome to the official recruitment portal for Kamu Guild.\n\n"
             "> Staff applications are a formal process that allows members of Kamu to apply for leadership and moderation roles within the guild. "
             "These applications help ensure that only responsible, dedicated, and capable members are selected to represent and support the community.\n\n"
-            "> Take your time with your application to ensure it's made to the best of your capabilities, ensure it shows initiative, commitment, and a willingness to take on more responsibility.\n\n"
-            "**Standard Requirements:**\n\n"
-            "> - Must be 14+\n"
-            "> - Active In the Discord\n"
-            "> - Able to work in a team"
+            "> Take your time with your application to ensure it's made to the best of your capabilities, ensure it shows initiative, commitment, and a willingness to take on more responsibility.\n"
         ),
         color=color
     )
@@ -657,6 +653,26 @@ class ApplicationView(ui.View):
         super().__init__(timeout=None) # Persistent view
         self.add_item(ApplicationSelect())
 
+class TournamentSelect(ui.Select):
+    def __init__(self):
+        options = [
+            discord.SelectOption(label="Tournament App", description="Apply for the Tournament", emoji="🏆"),
+        ]
+        super().__init__(placeholder="Select an application...", min_values=1, max_values=1, options=options, custom_id="tournament_select")
+    
+    async def callback(self, interaction: discord.Interaction):
+        # Check status
+        status = get_app_status(interaction.guild_id, "Tournament")
+        if status == "Closed":
+            await interaction.response.send_message("Sorry, tournament applications are currently **CLOSED**.", ephemeral=True)
+            return
+        await interaction.response.send_modal(TournamentModal())
+
+class TournamentView(ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+        self.add_item(TournamentSelect())
+
 # --- Cog ---
 
 class Applications(commands.Cog):
@@ -666,6 +682,7 @@ class Applications(commands.Cog):
     async def cog_load(self):
         self.bot.add_view(ApplicationView())
         self.bot.add_view(ApplicationReviewView())
+        self.bot.add_view(TournamentView())
 
     @app_commands.command(name="panel", description="Creates the application panel")
     @app_commands.checks.has_permissions(administrator=True)
@@ -695,40 +712,14 @@ class Applications(commands.Cog):
                 "### Welcome to the official tournament recruitment portal.\n\n"
                 "> Tournament applications are a formal process that allows members of Kamu to apply for the upcoming tournament. "
                 "These applications help ensure that only responsible, dedicated, and capable members are selected to represent and support the community.\n\n"
-                "> Take your time with your application to ensure it's made to the best of your capabilities, ensure it shows initiative, commitment, and a willingness to take on more responsibility.\n\n"
-                "**Standard Requirements:**\n\n"
-                "> - Must be 14+\n"
-                "> - Active In the Discord\n"
-                "> - Able to work in a team"
+                "> Take your time with your application to ensure it's made to the best of your capabilities, ensure it shows initiative, commitment, and a willingness to take on more responsibility.\n"
             ),
             color=color
         )
         embed.set_footer(text="Kamu Guild • Kaizen")
         
-        # Create a view with a select menu
-        class TournamentSelect(ui.Select):
-            def __init__(self):
-                options = [
-                    discord.SelectOption(label="Tournament App", description="Apply for the Tournament", emoji="🏆"),
-                ]
-                super().__init__(placeholder="Select an application...", min_values=1, max_values=1, options=options, custom_id="tournament_select")
-            
-            async def callback(self, interaction: discord.Interaction):
-                # Check status
-                status = get_app_status(interaction.guild_id, "Tournament")
-                if status == "Closed":
-                    await interaction.response.send_message("Sorry, tournament applications are currently **CLOSED**.", ephemeral=True)
-                    return
-                await interaction.response.send_modal(TournamentModal())
-
-        class TournamentView(ui.View):
-            def __init__(self):
-                super().__init__(timeout=None)
-                self.add_item(TournamentSelect())
-        
         view = TournamentView()
         await interaction.response.send_message(embed=embed, view=view)
-        self.bot.add_view(view)
 
     @app_commands.command(name="setapp", description="Set the status of an application (Open/Closed)")
     @app_commands.checks.has_permissions(administrator=True)
@@ -747,6 +738,7 @@ class Applications(commands.Cog):
         app_commands.Choice(name="Closed", value="Closed")
     ])
     async def setapp(self, interaction: discord.Interaction, app_type: app_commands.Choice[str], status: app_commands.Choice[str]):
+        await interaction.response.defer(ephemeral=True)
         status_data = load_app_status()
         guild_id = str(interaction.guild_id)
         
@@ -774,13 +766,29 @@ class Applications(commands.Cog):
             except Exception as e:
                 print(f"Failed to auto-update panel: {e}")
 
+        # Send panel if not updated
+        if not updated:
+            embeds = generate_panel_embeds(interaction.guild_id)
+            embeds[0].set_thumbnail(url=interaction.guild.icon.url if interaction.guild.icon else None)
+            
+            msg_panel = await interaction.channel.send(embeds=embeds, view=ApplicationView())
+            
+            # Save message info for auto-updates
+            config = load_panel_config()
+            config[str(interaction.guild_id)] = {
+                "channel_id": interaction.channel_id,
+                "message_id": msg_panel.id
+            }
+            save_panel_config(config)
+            updated = True # Panel was sent
+
         msg = f"Application status for **{app_type.value}** set to **{status.value}**."
         if updated:
-            msg += " The panel has been updated."
+            msg += " The panel has been updated or sent."
         else:
             msg += " (Could not auto-update panel. Please run /panel again if needed.)"
             
-        await interaction.response.send_message(msg, ephemeral=True)
+        await interaction.followup.send(msg, ephemeral=True)
 
     @app_commands.command(name="setrole", description="Set the role to be given when an application is accepted")
     @app_commands.checks.has_permissions(administrator=True)
