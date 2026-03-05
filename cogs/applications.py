@@ -480,8 +480,7 @@ class TournamentModal(ui.Modal, title='Tournament Application'):
 
     region = ui.TextInput(label='What is your region?', style=discord.TextStyle.short, required=True)
     timezone = ui.TextInput(label='What is your timezone, Ex: "GMT+0"', style=discord.TextStyle.short, required=True)
-    roblox_username = ui.TextInput(label='What is your roblox username?', style=discord.TextStyle.short, required=True)
-    discord_username = ui.TextInput(label='What is your discord username?', style=discord.TextStyle.short, required=True)
+    usernames = ui.TextInput(label='Roblox & Discord Usernames', style=discord.TextStyle.short, placeholder='Roblox: ... Discord: ...', required=True)
     abide_rules = ui.TextInput(label='Will you abide by the rules?', style=discord.TextStyle.short, required=True)
     reason = ui.TextInput(label='Reason for entering:', style=discord.TextStyle.paragraph, required=True)
 
@@ -489,8 +488,7 @@ class TournamentModal(ui.Modal, title='Tournament Application'):
         await send_application_log(interaction, "Tournament", [
             ("Region", self.region.value),
             ("Timezone", self.timezone.value),
-            ("Roblox Username", self.roblox_username.value),
-            ("Discord Username", self.discord_username.value),
+            ("Usernames", self.usernames.value),
             ("Will abide by rules", self.abide_rules.value),
             ("Reason for entering", self.reason.value)
         ])
