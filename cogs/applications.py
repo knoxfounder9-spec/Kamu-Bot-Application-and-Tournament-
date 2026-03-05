@@ -675,7 +675,7 @@ class Applications(commands.Cog):
     @app_commands.checks.has_permissions(administrator=True)
     async def tournamentpanel(self, interaction: discord.Interaction):
         # Create a specific embed for tournament
-        color = discord.Color.from_str("#740000")
+        color = discord.Color.gold()
         embed = discord.Embed(
             title="Tournament Recruitment",
             description=(
