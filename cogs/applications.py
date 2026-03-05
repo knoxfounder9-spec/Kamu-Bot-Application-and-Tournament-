@@ -15,6 +15,7 @@ LOG_CHANNEL_ID = os.getenv('LOG_CHANNEL_ID')
 ROLES_FILE = 'roles.json'
 APP_STATUS_FILE = 'app_status.json'
 PANEL_CONFIG_FILE = 'panel_config.json'
+RECRUITMENT_PANEL_CONFIG_FILE = 'recruitment_panel_config.json'
 
 # --- Helper Functions for Roles & Status ---
 def load_roles():
@@ -54,6 +55,16 @@ def load_panel_config():
 
 def save_panel_config(config_data):
     with open(PANEL_CONFIG_FILE, 'w') as f:
+        json.dump(config_data, f, indent=4)
+
+def load_recruitment_panel_config():
+    if not os.path.exists(RECRUITMENT_PANEL_CONFIG_FILE):
+        return {}
+    with open(RECRUITMENT_PANEL_CONFIG_FILE, 'r') as f:
+        return json.load(f)
+
+def save_recruitment_panel_config(config_data):
+    with open(RECRUITMENT_PANEL_CONFIG_FILE, 'w') as f:
         json.dump(config_data, f, indent=4)
 
 def generate_recruitment_panel_embeds(guild_id):
@@ -804,9 +815,23 @@ class Applications(commands.Cog):
     @app_commands.command(name="recruitmentpanel", description="Creates the general recruitment application panel")
     @app_commands.checks.has_permissions(administrator=True)
     async def recruitmentpanel(self, interaction: discord.Interaction):
-        view = ApplicationView()
-        embeds = generate_recruitment_panel_embeds(interaction.guild_id)
-        await interaction.response.send_message(embeds=embeds, view=view)
+        logger.info(f"Recruitment panel command called in guild {interaction.guild_id}")
+        try:
+            view = ApplicationView()
+            embeds = generate_recruitment_panel_embeds(interaction.guild_id)
+            await interaction.response.send_message(embeds=embeds, view=view)
+            message = await interaction.original_response()
+            
+            # Save config
+            config = load_recruitment_panel_config()
+            config[str(interaction.guild_id)] = {
+                "channel_id": interaction.channel_id,
+                "message_id": message.id
+            }
+            save_recruitment_panel_config(config)
+        except Exception as e:
+            logger.error(f"Error in recruitmentpanel: {e}")
+            await interaction.followup.send(f"An error occurred: {e}", ephemeral=True)
 
     @app_commands.command(name="setapp", description="Set the status of an application (Open/Closed)")
     @app_commands.checks.has_permissions(administrator=True)
