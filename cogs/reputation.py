@@ -33,6 +33,10 @@ class ReputationCog(commands.Cog):
 
     @commands.command(name="+rep")
     async def add_rep(self, ctx, user: discord.Member):
+        if ctx.author.id != 1313484931892117524:
+            await ctx.send("You do not have permission to use this command.")
+            return
+
         if user.id == ctx.author.id:
             await ctx.send("You cannot give reputation to yourself!")
             return
@@ -42,6 +46,10 @@ class ReputationCog(commands.Cog):
 
     @commands.command(name="-rep")
     async def remove_rep(self, ctx, user: discord.Member):
+        if ctx.author.id != 1313484931892117524:
+            await ctx.send("You do not have permission to use this command.")
+            return
+
         if user.id == ctx.author.id:
             await ctx.send("You cannot remove reputation from yourself!")
             return
