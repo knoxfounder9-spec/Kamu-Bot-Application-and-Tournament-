@@ -59,6 +59,10 @@ class TicketSelect(discord.ui.Select):
 
         staff_role = interaction.guild.get_role(staff_role_id) if staff_role_id else None
 
+        # Fallback: Try to find role by name "┃Kamu - Ticket Support"
+        if not staff_role:
+            staff_role = discord.utils.get(interaction.guild.roles, name="┃Kamu - Ticket Support")
+
         # 2. Create Channel
         overwrites = {
             interaction.guild.default_role: discord.PermissionOverwrite(read_messages=False),
@@ -91,7 +95,7 @@ class TicketSelect(discord.ui.Select):
             return
 
         # 3. Send Welcome Message
-        staff_ping = staff_role.mention if staff_role else "@┃Kamu - Ticket Support"
+        staff_ping = staff_role.mention if staff_role else "Staff"
         
         # Improved Welcome Message
         embed = discord.Embed(

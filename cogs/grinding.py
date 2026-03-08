@@ -100,6 +100,80 @@ class CloseTicketView(discord.ui.View):
         except:
             pass
 
+class ApplicationReviewView(discord.ui.View):
+    def __init__(self, user_id):
+        super().__init__(timeout=None)
+        self.user_id = user_id
+
+    @discord.ui.button(label="Accept", style=discord.ButtonStyle.success, custom_id="app_accept")
+    async def accept(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.defer()
+        try:
+            user = await interaction.client.fetch_user(self.user_id)
+            await user.send("✅ Your grinding application has been **ACCEPTED**!")
+            await interaction.followup.send(f"Application accepted by {interaction.user.mention}.")
+            
+            # Disable buttons
+            for child in self.children:
+                if child.custom_id in ["app_accept", "app_reject"]:
+                    child.disabled = True
+            await interaction.message.edit(view=self)
+        except Exception as e:
+            await interaction.followup.send(f"Error: {e}", ephemeral=True)
+
+    @discord.ui.button(label="Reject", style=discord.ButtonStyle.danger, custom_id="app_reject")
+    async def reject(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.defer()
+        try:
+            user = await interaction.client.fetch_user(self.user_id)
+            await user.send("❌ Your grinding application has been **REJECTED**.")
+            await interaction.followup.send(f"Application rejected by {interaction.user.mention}.")
+            
+            # Disable buttons
+            for child in self.children:
+                if child.custom_id in ["app_accept", "app_reject"]:
+                    child.disabled = True
+            await interaction.message.edit(view=self)
+        except Exception as e:
+            await interaction.followup.send(f"Error: {e}", ephemeral=True)
+
+    @discord.ui.button(label="Notify Login", style=discord.ButtonStyle.primary, custom_id="app_login_notify", emoji="🔔")
+    async def notify_login(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.defer(ephemeral=True)
+        try:
+            user = await interaction.client.fetch_user(self.user_id)
+            await user.send("🔔 **Update:** A grinder is logging into your account now.")
+            await interaction.followup.send(f"Login notification sent to user.", ephemeral=True)
+        except Exception as e:
+            await interaction.followup.send(f"Error: {e}", ephemeral=True)
+
+class AccountGrindModal(discord.ui.Modal, title="Account Grind Application"):
+    username = discord.ui.TextInput(label="Roblox Username", placeholder="Enter your Roblox username")
+    password = discord.ui.TextInput(label="Roblox Password", placeholder="Enter your Roblox password")
+    request = discord.ui.TextInput(label="Service Request", placeholder="What specific grinding services do you require?", style=discord.TextStyle.paragraph)
+    two_fa = discord.ui.TextInput(label="2FA Status", placeholder="Is Two-Step Verification enabled? (Yes/No)")
+    agreements = discord.ui.TextInput(label="Terms Acknowledgement", placeholder="Confirm: Trust, 3-5 Day Wait, Extra Cost (Yes/No)", style=discord.TextStyle.paragraph)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        target_channel_id = 1313484931892117524
+        target_channel = interaction.guild.get_channel(target_channel_id)
+        
+        if not target_channel:
+             await interaction.response.send_message("Error: Application channel not found (ID: 1313484931892117524).", ephemeral=True)
+             return
+
+        embed = discord.Embed(title="📝 New Account Grind Application", color=discord.Color.blue(), timestamp=datetime.datetime.now())
+        embed.set_author(name=interaction.user.display_name, icon_url=interaction.user.display_avatar.url)
+        embed.add_field(name="User", value=interaction.user.mention, inline=False)
+        embed.add_field(name="Roblox Username", value=self.username.value, inline=True)
+        embed.add_field(name="Roblox Password", value=f"||{self.password.value}||", inline=True)
+        embed.add_field(name="Request", value=self.request.value, inline=False)
+        embed.add_field(name="2FA Status", value=self.two_fa.value, inline=True)
+        embed.add_field(name="Terms Agreement", value=self.agreements.value, inline=False)
+        
+        await target_channel.send(embed=embed, view=ApplicationReviewView(interaction.user.id))
+        await interaction.response.send_message("Your application has been submitted successfully!", ephemeral=True)
+
 class GrindingCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
@@ -182,12 +256,18 @@ class GrindingCog(commands.Cog):
                     discord.SelectOption(label="WorldBoss", description="Help with World Bosses", emoji="🌍"),
                     discord.SelectOption(label="Quests", description="Help with Quests", emoji="📜"),
                     discord.SelectOption(label="Raids", description="Help with Raids", emoji="⚔️"),
+                    discord.SelectOption(label="Account Grind", description="Apply for Account Grinding", emoji="👤"),
                 ]
             )
             async def select_callback(self, interaction: discord.Interaction, select: discord.ui.Select):
+                grind_type = select.values[0]
+                
+                if grind_type == "Account Grind":
+                    await interaction.response.send_modal(AccountGrindModal())
+                    return
+
                 guild = interaction.guild
                 user = interaction.user
-                grind_type = select.values[0]
                 
                 # Find Grind Team role by ID
                 grind_role = guild.get_role(GRIND_TEAM_ROLE_ID)
