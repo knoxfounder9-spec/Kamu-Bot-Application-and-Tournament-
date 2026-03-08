@@ -106,7 +106,7 @@ class TicketSelect(discord.ui.Select):
         )
         embed.set_footer(text="Click the button below to close this ticket.")
 
-        await ticket_channel.send(content=f"{user.mention} {staff_ping}", embed=embed, view=TicketControlView())
+        await ticket_channel.send(content=f"{staff_ping}", embed=embed, view=TicketControlView())
 
         await interaction.followup.send(f"Ticket created: {ticket_channel.mention}", ephemeral=True)
 
