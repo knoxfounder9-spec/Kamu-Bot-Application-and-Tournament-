@@ -91,7 +91,7 @@ class TicketSelect(discord.ui.Select):
             return
 
         # 3. Send Welcome Message
-        staff_ping = staff_role.mention if staff_role else "Staff"
+        staff_ping = staff_role.mention if staff_role else "@┃Kamu - Ticket Support"
         
         # Improved Welcome Message
         embed = discord.Embed(
