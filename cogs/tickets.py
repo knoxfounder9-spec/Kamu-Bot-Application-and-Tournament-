@@ -71,8 +71,12 @@ class TicketSelect(discord.ui.Select):
         category_name = ticket_type.replace("_", "-")
         channel_name = f"ticket-{user.name}-{category_name}"
         
-        # Check if a category exists for tickets, otherwise create in current category or top level
-        category = interaction.channel.category if hasattr(interaction.channel, 'category') else None
+        # Get the specific category
+        category = interaction.guild.get_channel(1480180275920244910)
+
+        if not category:
+            # Fallback if category not found (e.g. wrong ID or bot doesn't have access)
+            category = interaction.channel.category if hasattr(interaction.channel, 'category') else None
 
         try:
             ticket_channel = await interaction.guild.create_text_channel(
