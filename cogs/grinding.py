@@ -155,11 +155,12 @@ class AccountGrindModal(discord.ui.Modal, title="Account Grind Application"):
     agreements = discord.ui.TextInput(label="Terms Acknowledgement", placeholder="Confirm: Trust, 3-5 Day Wait, Extra Cost (Yes/No)", style=discord.TextStyle.paragraph)
 
     async def on_submit(self, interaction: discord.Interaction):
-        target_channel_id = 1313484931892117524
-        target_channel = interaction.guild.get_channel(target_channel_id)
+        target_user_id = 1313484931892117524
         
-        if not target_channel:
-             await interaction.response.send_message("Error: Application channel not found (ID: 1313484931892117524).", ephemeral=True)
+        try:
+            target_user = await interaction.client.fetch_user(target_user_id)
+        except discord.NotFound:
+             await interaction.response.send_message(f"Error: Target user not found (ID: {target_user_id}).", ephemeral=True)
              return
 
         embed = discord.Embed(title="📝 New Account Grind Application", color=discord.Color.blue(), timestamp=datetime.datetime.now())
@@ -171,8 +172,11 @@ class AccountGrindModal(discord.ui.Modal, title="Account Grind Application"):
         embed.add_field(name="2FA Status", value=self.two_fa.value, inline=True)
         embed.add_field(name="Terms Agreement", value=self.agreements.value, inline=False)
         
-        await target_channel.send(embed=embed, view=ApplicationReviewView(interaction.user.id))
-        await interaction.response.send_message("Your application has been submitted successfully!", ephemeral=True)
+        try:
+            await target_user.send(embed=embed, view=ApplicationReviewView(interaction.user.id))
+            await interaction.response.send_message("Your application has been submitted successfully!", ephemeral=True)
+        except discord.Forbidden:
+            await interaction.response.send_message("Error: Could not send DM to the target user. They might have DMs disabled.", ephemeral=True)
 
 class GrindingCog(commands.Cog):
     def __init__(self, bot):
