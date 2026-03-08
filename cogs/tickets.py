@@ -3,8 +3,22 @@ from discord import app_commands
 from discord.ext import commands
 import sqlite3
 import os
+import asyncio
 
 DB_FILE = 'tickets.db'
+
+class TicketControlView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    @discord.ui.button(label="Close Ticket", style=discord.ButtonStyle.danger, custom_id="ticket_close", emoji="🔒")
+    async def close_ticket(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.send_message("Ticket will close in 5 seconds...", ephemeral=True)
+        await asyncio.sleep(5)
+        try:
+            await interaction.channel.delete()
+        except discord.NotFound:
+            pass # Channel already deleted
 
 class TicketSelect(discord.ui.Select):
     def __init__(self, bot):
@@ -74,15 +88,20 @@ class TicketSelect(discord.ui.Select):
         # 3. Send Welcome Message
         staff_ping = staff_role.mention if staff_role else "Staff"
         
-        welcome_msg = f"{user.mention}\n{staff_ping} will assist you slowly. Please be patient or something good"
-        
+        # Improved Welcome Message
         embed = discord.Embed(
-            title=f"{ticket_type.replace('_', ' ').title()}",
-            description="Please describe your issue in detail. Support will be with you shortly.",
+            title=f"🎫 {ticket_type.replace('_', ' ').title()}",
+            description=f"Hello {user.mention}!\n\n"
+                        f"Thank you for reaching out. {staff_ping} has been notified and will be with you shortly.\n\n"
+                        f"**Please provide the following details:**\n"
+                        f"• A clear description of your request or issue.\n"
+                        f"• Any relevant proof or screenshots.\n\n"
+                        f"Please be patient, we will assist you as soon as possible.",
             color=discord.Color.red()
         )
+        embed.set_footer(text="Click the button below to close this ticket.")
 
-        await ticket_channel.send(content=welcome_msg, embed=embed)
+        await ticket_channel.send(content=f"{user.mention} {staff_ping}", embed=embed, view=TicketControlView())
 
         await interaction.followup.send(f"Ticket created: {ticket_channel.mention}", ephemeral=True)
 
@@ -105,6 +124,7 @@ class TicketsCog(commands.Cog):
 
     async def cog_load(self):
         self.bot.add_view(TicketView(self.bot))
+        self.bot.add_view(TicketControlView())
 
     @app_commands.command(name="ticketstaffrole", description="Set the staff role for tickets")
     @app_commands.describe(role="The role to ping when a ticket is opened")
