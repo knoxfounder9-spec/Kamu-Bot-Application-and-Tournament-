@@ -72,6 +72,32 @@ class ReputationCog(commands.Cog):
         action = "given to" if amount >= 0 else "removed from"
         await ctx.send(f"**{amount} Reputation** {action} {user.mention} (`{user.id}`)! They now have **{new_rep}** rep.")
 
+    @commands.command(name="+rep")
+    async def plus_rep_command(self, ctx, user: discord.User):
+        if ctx.author.id != 1313484931892117524:
+            await ctx.send("You do not have permission to use this command.")
+            return
+
+        if user.id == ctx.author.id:
+            await ctx.send("You cannot modify your own reputation!")
+            return
+        
+        new_rep = self.update_rep(user.id, 1)
+        await ctx.send(f"**+1 Reputation** given to {user.mention} (`{user.id}`)! They now have **{new_rep}** rep.")
+
+    @commands.command(name="-rep")
+    async def minus_rep_command(self, ctx, user: discord.User):
+        if ctx.author.id != 1313484931892117524:
+            await ctx.send("You do not have permission to use this command.")
+            return
+
+        if user.id == ctx.author.id:
+            await ctx.send("You cannot modify your own reputation!")
+            return
+        
+        new_rep = self.update_rep(user.id, -1)
+        await ctx.send(f"**-1 Reputation** removed from {user.mention} (`{user.id}`)! They now have **{new_rep}** rep.")
+
     @app_commands.command(name="repleaderboard", description="Show the Reputation Leaderboard")
     async def repleaderboard(self, interaction: discord.Interaction):
         stats = self.get_all_rep()
