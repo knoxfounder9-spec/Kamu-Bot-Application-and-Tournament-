@@ -26,6 +26,7 @@ class TicketSelect(discord.ui.Select):
             discord.SelectOption(label="Claim Reward Ticket", value="reward", description="Claim a reward you have earned", emoji="🎁"),
             discord.SelectOption(label="Member Report Ticket", value="report_member", description="Report a member for rule violations", emoji="🛡️"),
             discord.SelectOption(label="Staff Report Ticket", value="report_staff", description="Report a staff member", emoji="🚨"),
+            discord.SelectOption(label="Warn Appeal Ticket", value="appeal_warn", description="Appeal a warning you received", emoji="📜"),
         ]
         super().__init__(
             placeholder="Select a ticket category...",
@@ -150,7 +151,8 @@ class TicketsCog(commands.Cog):
                         "**Categories:**\n"
                         "🎁 **Claim Reward Ticket** - Claim a reward you have earned.\n"
                         "🛡️ **Member Report Ticket** - Report a member for rule violations.\n"
-                        "🚨 **Staff Report Ticket** - Report a staff member.\n\n"
+                        "🚨 **Staff Report Ticket** - Report a staff member.\n"
+                        "📜 **Warn Appeal Ticket** - Appeal a warning you received.\n\n"
                         "Our staff team will be with you shortly.",
             color=discord.Color.red()
         )
