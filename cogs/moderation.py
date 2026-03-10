@@ -136,5 +136,38 @@ class ModerationCog(commands.Cog):
 
         await ctx.send(embed=embed)
 
+    @commands.command(name="perm", aliases=["perms", "permissions"])
+    async def user_permissions(self, ctx, member: discord.Member = None):
+        """Shows the permissions and other info of a user."""
+        member = member or ctx.author
+
+        embed = discord.Embed(
+            title=f"User Info & Permissions: {member.display_name}",
+            color=member.color
+        )
+        embed.set_thumbnail(url=member.display_avatar.url)
+        
+        # Basic Info
+        embed.add_field(name="ID", value=f"`{member.id}`", inline=True)
+        embed.add_field(name="Joined Server", value=discord.utils.format_dt(member.joined_at, 'F'), inline=True)
+        embed.add_field(name="Account Created", value=discord.utils.format_dt(member.created_at, 'F'), inline=False)
+        
+        # Roles
+        roles = [role.mention for role in reversed(member.roles[1:])] # Exclude @everyone, reverse for hierarchy
+        roles_str = " ".join(roles) if roles else "None"
+        if len(roles_str) > 1024:
+            roles_str = roles_str[:1020] + "..."
+        embed.add_field(name=f"Roles [{len(member.roles)-1}]", value=roles_str, inline=False)
+        
+        # Permissions
+        perms = [perm[0].replace('_', ' ').title() for perm in member.guild_permissions if perm[1]]
+        perms_str = ", ".join(perms) if perms else "None"
+        if len(perms_str) > 1024:
+            perms_str = perms_str[:1020] + "..."
+            
+        embed.add_field(name="Server Permissions", value=perms_str, inline=False)
+        
+        await ctx.send(embed=embed)
+
 async def setup(bot):
     await bot.add_cog(ModerationCog(bot))
