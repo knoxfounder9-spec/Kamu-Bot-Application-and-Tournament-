@@ -5,6 +5,7 @@ import sqlite3
 import asyncio
 import logging
 import random
+import re
 
 logger = logging.getLogger('discord')
 
@@ -31,7 +32,27 @@ class AICog(commands.Cog):
                           is_enabled INTEGER DEFAULT 0, 
                           behaviour TEXT DEFAULT 'You are a helpful AI assistant.',
                           model TEXT DEFAULT 'gpt-3.5-turbo')''')
+            c.execute('''CREATE TABLE IF NOT EXISTS ai_memory
+                         (user_id INTEGER, 
+                          guild_id INTEGER, 
+                          role TEXT, 
+                          content TEXT, 
+                          timestamp DATETIME DEFAULT CURRENT_TIMESTAMP)''')
             conn.commit()
+
+    def add_memory(self, user_id, guild_id, role, content):
+        with sqlite3.connect(DB_FILE) as conn:
+            c = conn.cursor()
+            c.execute("INSERT INTO ai_memory (user_id, guild_id, role, content) VALUES (?, ?, ?, ?)", (user_id, guild_id, role, content))
+            conn.commit()
+
+    def get_memory(self, user_id, guild_id, limit=30):
+        with sqlite3.connect(DB_FILE) as conn:
+            c = conn.cursor()
+            # Fetch the last `limit` messages for this user in this guild, ordered by oldest first for the AI context
+            c.execute("SELECT role, content FROM (SELECT role, content, timestamp FROM ai_memory WHERE user_id = ? AND guild_id = ? ORDER BY timestamp DESC LIMIT ?) ORDER BY timestamp ASC", (user_id, guild_id, limit))
+            results = c.fetchall()
+            return [{"role": r[0], "content": r[1]} for r in results]
 
     def get_config(self, guild_id):
         with sqlite3.connect(DB_FILE) as conn:
@@ -92,8 +113,16 @@ class AICog(commands.Cog):
 
             async with message.channel.typing():
                 # Inject a hidden system prompt to force the AI to act like a paid/premium service
-                premium_instruction = "\n\nCRITICAL INSTRUCTION: You are a premium, paid, enterprise-grade AI. You must NEVER mention being free, open-source, or using free providers. If asked about your cost, model, or nature, state that you are a highly advanced, paid premium AI service."
+                premium_instruction = "\n\nCRITICAL INSTRUCTION: You are a premium, paid, enterprise-grade AI. You must NEVER mention being free, open-source, or using free providers. If asked about your cost, model, or nature, state that you are a highly advanced, paid premium AI service. You must NEVER use @everyone, @here, or ping any roles."
                 full_behaviour = behaviour + premium_instruction
+
+                # Fetch user's chat history
+                history = self.get_memory(message.author.id, message.guild.id, limit=30)
+                
+                # Build message payload
+                messages_payload = [{"role": "system", "content": full_behaviour}]
+                messages_payload.extend(history)
+                messages_payload.append({"role": "user", "content": message.content})
 
                 # List of 100+ reliable models to try automatically (Fallback mechanism)
                 primary_models = [
@@ -151,10 +180,7 @@ class AICog(commands.Cog):
                             asyncio.to_thread(
                                 g4f.ChatCompletion.create,
                                 model=m,
-                                messages=[
-                                    {"role": "system", "content": full_behaviour},
-                                    {"role": "user", "content": message.content}
-                                ]
+                                messages=messages_payload
                             ),
                             timeout=6.0
                         )
@@ -175,8 +201,14 @@ class AICog(commands.Cog):
                     await message.reply("❌ All premium AI nodes are currently busy or down. Please try again in a moment.")
                     return
 
-                # Prevent the AI from pinging @everyone or @here
+                # Prevent the AI from pinging @everyone, @here, or roles
                 reply = response.replace("@everyone", "everyone").replace("@here", "here")
+                reply = re.sub(r'<@&\d+>', '', reply) # Strips role pings entirely from the text
+                
+                # Save to infinite memory database
+                self.add_memory(message.author.id, message.guild.id, "user", message.content)
+                self.add_memory(message.author.id, message.guild.id, "assistant", reply)
+
                 allowed = discord.AllowedMentions(everyone=False, roles=False, users=False)
                 
                 # Split message if > 2000 chars (Discord limit)
