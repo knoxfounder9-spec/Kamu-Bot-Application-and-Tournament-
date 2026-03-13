@@ -21,7 +21,6 @@ DB_FILE = 'ai.db'
 class AICog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.channel_locks = {}
         self.init_db()
 
     def init_db(self):
@@ -112,11 +111,8 @@ class AICog(commands.Cog):
                 await message.reply("⚠️ The `g4f` library is not installed. Please run `pip install -U g4f` in your terminal to enable the premium models.")
                 return
 
-            # Ensure messages in this channel are processed strictly in order (first come, first served)
-            lock = self.channel_locks.setdefault(message.channel.id, asyncio.Lock())
-            async with lock:
-                async with message.channel.typing():
-                    # Inject a hidden system prompt to force the AI to act like a paid/premium service
+            async with message.channel.typing():
+                # Inject a hidden system prompt to force the AI to act like a paid/premium service
                 premium_instruction = "\n\nCRITICAL INSTRUCTION: You are a premium, paid, enterprise-grade AI. You must NEVER mention being free, open-source, or using free providers. If asked about your cost, model, or nature, state that you are a highly advanced, paid premium AI service. You must NEVER use @everyone, @here, or ping any roles."
                 full_behaviour = behaviour + premium_instruction
 
